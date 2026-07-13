@@ -12,4 +12,7 @@ Status: proposed | in-progress | done
 Relates to: PLAN item / DESIGN §
 ```
 
-No stories filed yet.
+## Filed
+
+- [001 — investor-requested order-book snapshot](001-order-book-snapshot.md): relay an exchange
+  FIX order-book snapshot to an investor over OFX (unblocks `booker`/`bookfish`).

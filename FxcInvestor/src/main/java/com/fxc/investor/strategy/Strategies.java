@@ -12,10 +12,10 @@ public final class Strategies {
     public static Strategy byName(String name) {
         return switch (name == null ? "rando" : name.toLowerCase()) {
             case "rando" -> new SamplingStrategy("rando", new RandoSampler());
-            // ToDo (docs/stories/002,003): "booker" -> book-weighted sampler (≤1σ),
-            //                              "bookfish" -> traded-volume sampler (≤0.5σ).
+            case "booker" -> new SamplingStrategy("booker", new BookerSampler());
+            case "bookfish" -> new SamplingStrategy("bookfish", new BookfishSampler());
             default -> throw new IllegalArgumentException("unknown strategy: " + name
-                    + " (available: rando; booker/bookfish are planned — see FxcInvestor/docs/stories/)");
+                    + " (available: rando, booker, bookfish)");
         };
     }
 }

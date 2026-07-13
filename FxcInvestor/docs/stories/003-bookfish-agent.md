@@ -1,6 +1,6 @@
 # bookfish — traded-volume-weighted agent
 
-Status: proposed
+Status: implemented (traded-volume histogram fed from the XMPP feed; 0.5σ filter)
 Relates to: PLAN item 5 (Strategy SPI + agents); [002](002-booker-agent.md)
 
 ## Summary

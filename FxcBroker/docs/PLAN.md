@@ -27,6 +27,8 @@ shown) against a live FxcExchange with a BROKER2 liquidity client, for both EUR/
 
 ## Backlog / next
 
+- [ ] **Investor-requested order-book snapshot** ([stories/001](stories/001-order-book-snapshot.md)):
+  relay an exchange FIX book snapshot to investors over OFX — unblocks FxcInvestor `booker`/`bookfish`.
 - [ ] Publication legs (FIX drop-copy + XMPP bot) once FxcPub is unblocked (PROBLEMS.md B4).
 - [ ] `ArchiveService` to MariaDB cold schema (root Phase 5).
 - [ ] Consolidate `GridNode` into a shared `fxc-grid` module (PROBLEMS.md B7).

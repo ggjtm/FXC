@@ -14,21 +14,26 @@ GridGain node — so no Ignite `--add-opens` flags either.
    order/position mirror. Best-effort decision log first; full mirror later.
 2. [x] **OFX client** (OFX4J): signon to FxcBroker, statement sync, order submission via the custom
    `FXCORDMSGSRQV1` message set (now shared in `fxc-common` so broker + investor round-trip it).
-3. [ ] **XMPP client** (Smack): feed ingestion (last-sale + traded-volume signal) + posting.
-   FxcPub/Tigase is now available (Phase 3 done).
+3. [x] **XMPP client** (Smack): `FeedClient` — feed ingestion folds fill statuses into `MarketView`
+   (last-sale + traded-volume, driving `bookfish`) and posts statuses; wired into the runner
+   best-effort. (CLI `feed`/`post` verbs pending with item 4.)
 4. [ ] **CLI REPL**: `buy sell positions orders feed post agent on|off quit`.
-5. [~] **Strategy SPI** + agents + decision loop. The Strategy SPI and the **`rando`** agent +
-   single-instance runner are built; **`booker`** and **`bookfish`** are specified as stories.
+5. [x] **Strategy SPI** + agents + decision loop. `rando`, `booker`, and `bookfish` all implemented
+   over a shared `PriceTargetSampler`/`SamplingStrategy` shell; single-instance runner built.
 
 ## Stories
 
 Agent strategies and runners are specified as stories in [stories/](stories/):
 
 - [001 — `rando`](stories/001-rando-agent.md): uniform-random side/qty; price target ±1% of last sale. **(implemented)**
-- [002 — `booker`](stories/002-booker-agent.md): price target from a quantity-weighted **order-book** histogram, ≤1σ from last sale.
-- [003 — `bookfish`](stories/003-bookfish-agent.md): price target from a **traded-volume** histogram, ≤0.5σ from last sale.
-- [004 — single-instance runner](stories/004-single-instance-runner.md): run one agent (OFX + optional feed) with a selectable strategy. **(in progress)**
+- [002 — `booker`](stories/002-booker-agent.md): price target from a quantity-weighted **order-book** histogram, ≤1σ from last sale. **(implemented)**
+- [003 — `bookfish`](stories/003-bookfish-agent.md): price target from a **traded-volume** histogram, ≤0.5σ from last sale. **(implemented)**
+- [004 — single-instance runner](stories/004-single-instance-runner.md): run one agent (OFX + live XMPP feed) with a selectable strategy. **(in progress — feed wired; CLI REPL pending)**
 - [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): opt-in Gatling harness for perf testing + bulk simulation.
+
+**Note (booker data source):** `booker`'s order-book histogram needs live book depth, which the
+plain OFX/XMPP investor doesn't see — it falls back to `rando` behavior until fed a book snapshot
+(FxcBroker/docs/stories/001). `bookfish` is fully driven by the XMPP feed it already consumes.
 
 All three agents share a pluggable `PriceTargetSampler` seam over a common agent shell; only the
 price-target distribution and σ filter differ.

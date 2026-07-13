@@ -3,6 +3,7 @@ package com.fxc.investor;
 import com.fxc.common.config.FxcConfig;
 import com.fxc.investor.agent.InvestorAgent;
 import com.fxc.investor.agent.SubmittedOrder;
+import com.fxc.investor.feed.FeedClient;
 import com.fxc.investor.ofx.OfxBrokerClient;
 import com.fxc.investor.strategy.MarketView;
 import com.fxc.investor.strategy.PortfolioView;
@@ -47,7 +48,39 @@ public final class Main {
         OfxBrokerClient broker = new OfxBrokerClient(ofxUrl, ofxUser, ofxPassword, brokerId);
         Strategy strategy = Strategies.byName(strategyName);
         MarketView market = new MarketView();
-        market.setLastSale(symbol, seedLastSale); // ToDo: replace with XMPP feed ingestion (PLAN item 3)
+        market.setLastSale(symbol, seedLastSale); // initial fallback; the live feed updates it below
+
+        // Live market data from the FxcPub XMPP feed (best-effort — falls back to the seed if the
+        // feed is unavailable). Populates last-sale (all agents) and traded volume (bookfish).
+        FeedClient feed = null;
+        if (config.getBoolean("xmpp.feed.enabled", true)) {
+            String xmppHost = config.getString("xmpp.host", "localhost");
+            int xmppPort = config.getInt("xmpp.port", 5222);
+            String xmppDomain = config.getString("xmpp.domain", "fxc.local");
+            String xmppUser = config.getString("xmpp.user", "investor");
+            String xmppPassword = config.getString("xmpp.password", "secret");
+            String feedBroker = config.getString("xmpp.feedBroker", "BROKER1");
+            try {
+                feed = new FeedClient(xmppHost, xmppPort, xmppDomain);
+                feed.connect(xmppUser, xmppPassword);
+                feed.subscribeFeed(feedBroker, market);
+                System.out.println("Subscribed to XMPP feed " + FeedClient.feedNode(feedBroker)
+                        + " at " + xmppHost + ":" + xmppPort);
+            } catch (Exception e) {
+                System.out.println("XMPP feed unavailable (" + e.getMessage()
+                        + "); using seeded last-sale " + seedLastSale);
+                if (feed != null) {
+                    feed.close();
+                    feed = null;
+                }
+            }
+        }
+        final FeedClient feedRef = feed;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (feedRef != null) {
+                feedRef.close();
+            }
+        }));
 
         InvestorAgent agent = new InvestorAgent(account, broker, strategy, market, new Random(seed), "INV");
 

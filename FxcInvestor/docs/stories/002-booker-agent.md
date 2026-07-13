@@ -1,6 +1,6 @@
 # booker — order-book-weighted agent
 
-Status: proposed
+Status: implemented (sampler + σ filter; falls back to rando until a live book snapshot is supplied)
 Relates to: PLAN item 5 (Strategy SPI + agents); [001](001-rando-agent.md)
 
 ## Summary
