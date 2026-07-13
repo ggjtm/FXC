@@ -2,6 +2,7 @@ package com.fxc.exchange;
 
 import com.fxc.common.config.FxcConfig;
 import com.fxc.common.instrument.InstrumentCatalog;
+import com.fxc.common.store.ColdStore;
 import com.fxc.exchange.fix.ExchangeServer;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -32,9 +33,15 @@ public final class Main {
             settings = new SessionSettings(cfg);
         }
 
-        System.out.println("FxcExchange starting (GridGain='" + instanceName + "', FIX acceptor from cfg)...");
+        // Cold-data archival to MariaDB (best-effort — runs without it if the DB is unreachable).
+        ColdStore coldStore = openColdStore(config);
+        long archiveIntervalMs = config.getInt("archive.intervalMs", 30_000);
+
+        System.out.println("FxcExchange starting (GridGain='" + instanceName + "', FIX acceptor from cfg"
+                + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off") + ")...");
         ExchangeServer server = ExchangeServer.start(
-                settings, instanceName, discoveryPort, workDir, InstrumentCatalog.defaults());
+                settings, instanceName, discoveryPort, workDir, InstrumentCatalog.defaults(),
+                coldStore, archiveIntervalMs);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -45,6 +52,21 @@ public final class Main {
         System.out.println("FxcExchange started. " + InstrumentCatalog.defaults().size()
                 + " instruments listed. Ctrl-C to stop.");
         shutdown.await();
+    }
+
+    private static ColdStore openColdStore(FxcConfig config) {
+        if (!config.getBoolean("archive.enabled", true)) {
+            return null;
+        }
+        String url = config.getString("db.url", "jdbc:mariadb://localhost:3306/fxc_exchange");
+        String user = config.getString("db.user", "fxc");
+        String password = config.getString("db.password", "fxc");
+        try {
+            return ColdStore.open(url, user, password, "fxc-exchange-cold", "db/schema.sql");
+        } catch (Exception e) {
+            System.out.println("Cold-data archival unavailable (" + e.getMessage() + "); continuing without it.");
+            return null;
+        }
     }
 
     private static FxcConfig loadConfig() {

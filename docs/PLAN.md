@@ -88,13 +88,21 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
    (market view from statements/feed → `Strategy.evaluate` → order via OFX).
 - **Exit criteria**: `agent on` trades autonomously end-to-end and its fills appear on FxcPub.
 
-## Phase 5 — Cold-data archival
+## Phase 5 — Cold-data archival — DONE
 
-- `ArchiveService` in each GridGain component: drain terminal/aged rows (orders, trades,
-  settlements, statuses) from GridGain tables to the component's MariaDB schema.
-- FxcPub deep-history timeline reads fall back to MariaDB.
-- **Exit criteria**: hot tables stay bounded under sustained trading; archived rows queryable
-  in MariaDB.
+- [x] Shared `com.fxc.common.store.ColdStore` (HikariCP + JDBC, schema apply) in fxc-common.
+- [x] `ArchiveService` in each GridGain component: drain terminal/aged rows to the component's
+  MariaDB schema, MariaDB-first then delete-by-id (idempotent, no data loss on failure):
+  - FxcExchange: terminal orders + all trades + settlement obligations.
+  - FxcBroker: terminal client orders + their executions.
+  - FxcPub: statuses aged past the hot retention window.
+- [x] Each component schedules archival (`archive.intervalMs`) and wires a best-effort `ColdStore`
+  in `Main`; a scheduler-off variant (`intervalMs <= 0`) supports manual test passes.
+- [x] FxcPub deep-history timeline reads fall back to MariaDB (`TimelineService` unions the hot
+  `STATUS` projection with the cold `STATUS_ARCHIVE`, newest-first, deduped).
+- **Exit criteria (met)**: hot tables stay bounded under sustained trading; archived rows queryable
+  in MariaDB. Verified by `ExchangeArchiveIntegrationTest`, `BrokerArchiveIntegrationTest`,
+  `PubArchiveIntegrationTest` (all gated on the MariaDB container).
 
 ## Phase 6 — End-to-end demo & hardening
 

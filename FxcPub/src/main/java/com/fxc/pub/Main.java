@@ -1,6 +1,7 @@
 package com.fxc.pub;
 
 import com.fxc.common.config.FxcConfig;
+import com.fxc.common.store.ColdStore;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -37,12 +38,19 @@ public final class Main {
 
         int fixPort = config.getInt("fix.acceptor.port", 9878);
 
+        // Cold-data archival to MariaDB (best-effort — runs without it if the DB is unreachable).
+        ColdStore coldStore = openColdStore(config);
+        long archiveIntervalMs = config.getInt("archive.intervalMs", 30_000);
+        long retentionMs = config.getInt("archive.retentionMs", 3_600_000); // keep 1h of statuses hot
+
         System.out.println("FxcPub starting (grid='" + gridInstance + "', XMPP " + xmppUser + "@"
-                + xmppDomain + " via " + xmppHost + ":" + xmppPort + ", FIX drop-copy :" + fixPort + ")...");
+                + xmppDomain + " via " + xmppHost + ":" + xmppPort + ", FIX drop-copy :" + fixPort
+                + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off") + ")...");
 
         PubServer server = PubServer.start(gridInstance, gridDiscoveryPort, workDir,
                 xmppHost, xmppPort, xmppDomain, xmppUser, xmppPassword,
-                dropCopyAcceptorSettings(fixPort));
+                dropCopyAcceptorSettings(fixPort),
+                coldStore, archiveIntervalMs, retentionMs);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -74,6 +82,21 @@ public final class Main {
                 TargetCompID=BROKER2
                 """.formatted(port);
         return new SessionSettings(new ByteArrayInputStream(cfg.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private static ColdStore openColdStore(FxcConfig config) {
+        if (!config.getBoolean("archive.enabled", true)) {
+            return null;
+        }
+        String url = config.getString("db.url", "jdbc:mariadb://localhost:3306/fxc_pub");
+        String user = config.getString("db.user", "fxc");
+        String password = config.getString("db.password", "fxc");
+        try {
+            return ColdStore.open(url, user, password, "fxc-pub-cold", "db/schema.sql");
+        } catch (Exception e) {
+            System.out.println("Cold-data archival unavailable (" + e.getMessage() + "); continuing without it.");
+            return null;
+        }
     }
 
     private static FxcConfig loadConfig() {

@@ -2,6 +2,7 @@ package com.fxc.broker;
 
 import com.fxc.broker.oms.FixSettingsFactory;
 import com.fxc.common.config.FxcConfig;
+import com.fxc.common.store.ColdStore;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,8 +46,13 @@ public final class Main {
         String brokerId = config.getString("ofx.brokerId", "FXC-BROKER");
         String devAccount = config.getString("account.dev", "000123456");
 
+        // Cold-data archival to MariaDB (best-effort — runs without it if the DB is unreachable).
+        ColdStore coldStore = openColdStore(config);
+        long archiveIntervalMs = config.getInt("archive.intervalMs", 30_000);
+
         System.out.println("FxcBroker starting (grid='" + gridInstance + "', exchange="
-                + exchangeHost + ":" + exchangePort + " as " + senderCompId + ", OFX :" + ofxPort + ")...");
+                + exchangeHost + ":" + exchangePort + " as " + senderCompId + ", OFX :" + ofxPort
+                + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off") + ")...");
 
         BrokerServer server = BrokerServer.start(
                 gridInstance, gridDiscoveryPort, workDir,
@@ -56,7 +62,8 @@ public final class Main {
                         Map.of("USD", new BigDecimal("1000000"))),
                 dropCopyEnabled
                         ? FixSettingsFactory.initiator(pubHost, pubPort, senderCompId, "FXCPUB")
-                        : null);
+                        : null,
+                coldStore, archiveIntervalMs);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -67,6 +74,21 @@ public final class Main {
         System.out.println("FxcBroker started. OFX on port " + server.ofxPort()
                 + ", account " + devAccount + " seeded. Ctrl-C to stop.");
         shutdown.await();
+    }
+
+    private static ColdStore openColdStore(FxcConfig config) {
+        if (!config.getBoolean("archive.enabled", true)) {
+            return null;
+        }
+        String url = config.getString("db.url", "jdbc:mariadb://localhost:3306/fxc_broker");
+        String user = config.getString("db.user", "fxc");
+        String password = config.getString("db.password", "fxc");
+        try {
+            return ColdStore.open(url, user, password, "fxc-broker-cold", "db/schema.sql");
+        } catch (Exception e) {
+            System.out.println("Cold-data archival unavailable (" + e.getMessage() + "); continuing without it.");
+            return null;
+        }
     }
 
     private static FxcConfig loadConfig() {

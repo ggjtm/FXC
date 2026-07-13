@@ -10,7 +10,18 @@ CREATE TABLE IF NOT EXISTS schema_version (
     applied_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO schema_version (component, version) VALUES ('fxc_pub', 0)
-    ON DUPLICATE KEY UPDATE version = version;
+INSERT INTO schema_version (component, version) VALUES ('fxc_pub', 1)
+    ON DUPLICATE KEY UPDATE version = 1;
 
--- ToDo (Phase 3/5): STATUS_ARCHIVE (aged statuses for deep-history timeline reads).
+-- Aged statuses drained from the GridGain STATUS hot projection. Deep-history timeline reads fall
+-- back here when the requested window predates the hot retention window (docs/DESIGN.md §4.3, §5).
+CREATE TABLE IF NOT EXISTS STATUS_ARCHIVE (
+    status_id   VARCHAR(96)  NOT NULL PRIMARY KEY,
+    feed        VARCHAR(96)  NOT NULL,
+    author      VARCHAR(96),
+    body        VARCHAR(1024) NOT NULL,
+    created_at  BIGINT       NOT NULL,
+    seq         BIGINT       NOT NULL,
+    archived_at BIGINT       NOT NULL,
+    INDEX idx_status_archive_feed_seq (feed, seq)
+);
