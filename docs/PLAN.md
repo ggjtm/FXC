@@ -1,6 +1,7 @@
 # FXC Implementation Plan
 
-Status: **draft for review — implementation not started.**
+Status: **Phase 1 complete** (FxcExchange: matching, FIX, market data, clearing — 26 tests green).
+Phase 0 done except the Tigase spike (gated on the AGPLv3 hold decision — PROBLEMS.md P2).
 Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
@@ -19,12 +20,12 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
   7.1.0. Add the JDK 21 `--add-opens` flags for Ignite/GridGain. (Javalin is **not** wired now —
   it belongs to the deferred Mastodon gateway, Phase 7 / DESIGN §6.2.)
 - **⚠️ Tigase spike (blocking gate for FxcPub):** run **stock, unmodified** Tigase 8.4.1 as a
-  docker-compose service (image `tigase/tigase-server`) against MariaDB (load its repository
+  docker-compose service (image `tigase/tigase-xmpp-server`) against MariaDB (load its repository
   schema via `scripts/tigase.sh install-schema`), create a pubsub node, and complete a Smack
   login + publish/subscribe round-trip **as an XMPP client**. Confirm JDK 21 and accept the
   AGPLv3 license. No custom plugins; Tigase is external, not embedded (resolved — DESIGN §6.1,
   PROBLEMS.md P1/P2).
-- `docker-compose.yml` with MariaDB (`mariadb:11.8`) **and Tigase** (`tigase/tigase-server`);
+- `docker-compose.yml` with MariaDB (`mariadb:11.8`) **and Tigase** (`tigase/tigase-xmpp-server`);
   per-component `schema.sql` stubs (Tigase's own repository schema is loaded by its schema tool).
 - Per-component `conf/*.conf` with localhost defaults.
 - **Exit criteria**: `./gradlew build` green with all dependencies resolving; `docker compose up`

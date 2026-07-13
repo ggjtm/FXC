@@ -1,0 +1,54 @@
+# FXC dependency version catalog.
+# Versions confirmed 2026-07-13; see .reference/README.md for the source-of-truth table.
+# Javalin is intentionally absent — it belongs to the deferred Mastodon gateway (PLAN Phase 7).
+
+[versions]
+gridgain = "8.9.35"          # GridGain 8 CE; NOT on Maven Central (see [repositories] in root build)
+ignite = "2.18.0"            # Apache Ignite 2.x — API-compatible fallback, same org.apache.ignite.* namespace
+quickfixj = "3.0.1"
+ofx4j = "1.39"
+smack = "4.4.8"
+mariadb = "3.5.9"
+hikari = "7.1.0"
+slf4j = "2.0.16"
+junit = "5.11.3"
+
+[libraries]
+# --- GridGain 8 CE (primary hot-state engine) ---
+gridgain-core = { module = "org.gridgain:ignite-core", version.ref = "gridgain" }
+gridgain-indexing = { module = "org.gridgain:ignite-indexing", version.ref = "gridgain" } # required for SQL
+
+# --- Apache Ignite 2.x (drop-in fallback; unused unless GridGain access is blocked) ---
+ignite-core = { module = "org.apache.ignite:ignite-core", version.ref = "ignite" }
+ignite-indexing = { module = "org.apache.ignite:ignite-indexing", version.ref = "ignite" }
+
+# --- FIX engine ---
+quickfixj-core = { module = "org.quickfixj:quickfixj-core", version.ref = "quickfixj" }
+quickfixj-fix44 = { module = "org.quickfixj:quickfixj-messages-fix44", version.ref = "quickfixj" }
+
+# --- OFX ---
+ofx4j = { module = "com.webcohesion.ofx4j:ofx4j", version.ref = "ofx4j" }
+
+# --- XMPP client (Smack) ---
+smack-java8 = { module = "org.igniterealtime.smack:smack-java8", version.ref = "smack" }
+smack-tcp = { module = "org.igniterealtime.smack:smack-tcp", version.ref = "smack" }
+smack-extensions = { module = "org.igniterealtime.smack:smack-extensions", version.ref = "smack" }
+smack-experimental = { module = "org.igniterealtime.smack:smack-experimental", version.ref = "smack" }
+
+# --- MariaDB / connection pool ---
+mariadb-client = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
+hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
+
+# --- logging ---
+slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+slf4j-simple = { module = "org.slf4j:slf4j-simple", version.ref = "slf4j" }
+
+# --- testing ---
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+
+[bundles]
+gridgain = ["gridgain-core", "gridgain-indexing"]
+ignite = ["ignite-core", "ignite-indexing"]
+smack = ["smack-java8", "smack-tcp", "smack-extensions", "smack-experimental"]
+quickfixj = ["quickfixj-core", "quickfixj-fix44"]

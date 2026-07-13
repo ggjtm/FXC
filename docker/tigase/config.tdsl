@@ -1,0 +1,37 @@
+# Tigase XMPP Server configuration (config.tdsl) — STOCK server, no custom code.
+# This is the only FXC-authored input to Tigase; all FXC behavior lives in XMPP *clients*
+# (docs/DESIGN.md §4.3). Best-effort Phase-0 scaffold — validate against 8.4.1 during the spike.
+
+'config-type' = 'default'
+
+# Dev virtual host + bootstrap admin (real accounts are provisioned in Phase 3).
+'default-virtual-host' = 'fxc.local'
+admins = [ 'admin@fxc.local' ]
+
+# --- Persistence: Tigase's native JDBC repository on the shared MariaDB (docs/DESIGN.md §4.3) ---
+dataSource {
+    default () {
+        uri = 'jdbc:mariadb://mariadb:3306/tigasedb?user=tigase&password=tigase&useSSL=false&allowPublicKeyRetrieval=true'
+    }
+}
+
+userRepository {
+    default () {}
+}
+authRepository {
+    default () {}
+}
+
+# --- Connection managers ---
+c2s () {}          # client-to-server (Smack connects here, port 5222)
+s2s () {}          # server-to-server
+ws2s () {}         # websocket
+bosh () {}         # BOSH
+
+# --- Components ---
+# PubSub (XEP-0060): each account has a feed node; follows are subscriptions (DESIGN §4.3).
+pubsub () {}
+# Multi-user chat (available; not required by the core FXC flows).
+muc () {}
+# Message archive management (XEP-0313), useful for deep-history timeline reads.
+'message-archive' () {}

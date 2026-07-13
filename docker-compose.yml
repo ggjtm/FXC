@@ -1,0 +1,48 @@
+# FXC dev infrastructure: one MariaDB instance + stock, unmodified Tigase XMPP server.
+#
+# MariaDB hosts every component's cold/archival schema (fxc_pub, fxc_broker, fxc_exchange,
+# fxc_investor) AND Tigase's own repository (tigasedb). Tigase (docs/DESIGN.md §4.3) runs 100%
+# unmodified from the vendor image — configured only via the mounted config.tdsl, no custom code.
+#
+# NOTE: the official image is `tigase/tigase-xmpp-server` (the reference docs' `tigase/tigase-server`
+# was incorrect). Pinned to 8.4.1 per the confirmed version catalog.
+#
+# Tigase is AGPLv3 (a commercial license is available). Bringing this service up runs that software.
+
+name: fxc
+
+services:
+  mariadb:
+    image: mariadb:11.8
+    container_name: fxc-mariadb
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-fxc-root}
+    ports:
+      - "3306:3306"
+    volumes:
+      - fxc-mariadb-data:/var/lib/mysql
+      - ./docker/mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  tigase:
+    image: tigase/tigase-xmpp-server:8.4.1
+    container_name: fxc-tigase
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "5222:5222"   # client-to-server (XMPP c2s) — Smack connects here
+      - "5269:5269"   # server-to-server
+      - "5280:5280"   # HTTP (BOSH / WebSocket / REST)
+      - "8080:8080"   # HTTP admin UI
+    volumes:
+      - ./docker/tigase/config.tdsl:/home/tigase/tigase-server/etc/config.tdsl:ro
+      - fxc-tigase-logs:/home/tigase/tigase-server/logs
+
+volumes:
+  fxc-mariadb-data:
+  fxc-tigase-logs:

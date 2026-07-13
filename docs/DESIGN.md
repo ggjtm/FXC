@@ -86,6 +86,11 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
   no shared cluster). Cluster size is configuration, so any component can scale out later.
 - Domain logic is deployed as **GridGain services** (`org.apache.ignite.services.Service`),
   giving each component cluster-singleton or node-singleton semantics per service.
+  - **Implementation note (Phase 1):** on the single-node embedded topology the FXC services are
+    currently **node-hosted POJOs that use the GridGain data grid for all state** (SQL tables /
+    caches), rather than formal `Service` deployments. This keeps live wiring (FIX sessions,
+    listeners) simple and sidesteps service-serialization subtleties; wrapping them as Service
+    Grid deployments is mechanical and deferred until multi-node scale-out is actually needed.
 - Operational data lives in **GridGain SQL tables** (caches with query entities / `CREATE TABLE`),
   **in-memory by default**; GridGain native persistence stays off unless configured.
 - Dependency: GridGain 8 Community Edition artifacts (`org.gridgain:ignite-core` et al. from the
@@ -155,7 +160,7 @@ layer** (FXC's own code), which are joined *only* through standard XMPP.
 
 **Design principle — Tigase runs 100% unmodified.** FxcPub adds **no** custom Tigase plugins,
 components, processors, or patched builds; it runs the vendor distribution as-is (docker-compose
-service, image `tigase/tigase-server`), configured only through supported `config.tdsl` and
+service, image `tigase/tigase-xmpp-server`), configured only through supported `config.tdsl` and
 `dataSource` settings. All FXC-specific behavior lives in the application layer, which interacts
 with Tigase strictly as a **standard XMPP client** over the wire (Smack). Rationale:
 

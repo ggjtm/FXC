@@ -47,7 +47,7 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
 - **Deployment model — RESOLVED: stock, standalone, external service.** Research found **no
   verified public Maven coordinate or supported API for embedding Tigase in-process**. Tigase
   (current **8.4.1**) ships as a distributable server package (`*-dist`) plus Docker image
-  `tigase/tigase-server`, started via `scripts/tigase.sh` (main class `tigase.server.XMPPServer`).
+  `tigase/tigase-xmpp-server`, started via `scripts/tigase.sh` (main class `tigase.server.XMPPServer`).
   **Decision:** FxcPub runs Tigase **100% unmodified** (no custom plugins/components/patches;
   configured only via supported `config.tdsl`/`dataSource`) as an **external service** — a
   docker-compose service in dev — *not* bootstrapped inside the FxcPub JVM. **FxcPub's own code
@@ -57,10 +57,12 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
 - **JDK 21 support — mostly confirmed, verify in spike.** Documented minimum is **JDK 17**; the
   official Docker image builds on **21** (so 21 works in practice), but there is no explicit
   "certified on 21" statement. Low risk given we run the vendor Docker image.
-- **License — AGPLv3.** Tigase XMPP Server is **AGPLv3** (separate commercial license available).
-  Running it as a separate, **unmodified** process (the P1 decision) means its copyleft does not
-  automatically extend to FxcPub — but this is a legal judgment to confirm, and contrasts with the
-  permissive licenses elsewhere (QuickFIX/J BSD-style, OFX4J Apache-2.0). Needs explicit acceptance.
+- **License — AGPLv3. DECISION: HOLD (2026-07-13).** Tigase XMPP Server is **AGPLv3** (separate
+  commercial license available). Running it as a separate, **unmodified** process (the P1 decision)
+  means its copyleft does not automatically extend to FxcPub — but this is a legal judgment to
+  confirm, and contrasts with the permissive licenses elsewhere (QuickFIX/J BSD-style, OFX4J
+  Apache-2.0). Jeremy chose to **hold**: the Tigase image is not to be pulled/run yet, so the
+  Phase-0 spike stays un-run and FxcPub (Phase 3) remains gated. Phases 1–2 proceed regardless.
 - **Integration seam (XMPP-client side).** Decide how FxcPub's XMPP-client services publish into
   and read from Tigase PubSub — the documented paths are a **trusted/admin Smack client
   connection** or **ad-hoc commands**. (Tigase's own REST API is a candidate for the *deferred*
@@ -72,6 +74,26 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
   *application-domain* hot state (timeline projections, follow-graph cache, FIX-gateway rendering),
   consistent with FxcBroker/FxcExchange. A GridGain-backed custom Tigase `DataSource` is a
   possible future optimization, **not** a goal.
+
+### Phase-0 spike status (2026-07-13)
+
+Progress so far, and what remains before the gate is cleared:
+
+- **Docker image name corrected.** The reference docs said `tigase/tigase-server`; the actual
+  official image is **`tigase/tigase-xmpp-server`** (tag `8.4.1` confirmed to exist on Docker Hub).
+  Fixed in DESIGN, PLAN, and `.reference/`. (`github.com/tigase/tigase-server` remains the correct
+  *source-repo* URL — only the Docker image name was wrong.)
+- **Infra scaffolded.** `docker-compose.yml` defines both MariaDB and Tigase; `docker/tigase/config.tdsl`
+  is a best-effort stock config (MariaDB `dataSource`, `pubsub`/`muc`/`message-archive` components,
+  vhost `fxc.local`); `docker/mariadb/init/01-databases.sql` creates `tigasedb` + a `tigase` user.
+- **MariaDB half verified.** `docker compose up mariadb` comes up healthy; all four component schemas
+  and `tigasedb` exist; the `fxc` user connects; the per-component `schema.sql` stubs apply cleanly.
+- **⏳ NOT yet done — the Tigase run + Smack round-trip.** Pulling/running the Tigase container,
+  loading its repository schema, creating a pubsub node, and completing a Smack login +
+  publish/subscribe round-trip are **pending the AGPLv3 acceptance decision** below (running the
+  image is using AGPLv3 software). The `config.tdsl` schema-bootstrap mechanism for 8.4.1 is also
+  unverified and may need adjustment during the run. **This is the remaining blocking gate for
+  FxcPub (Phase 3); it does not block Phases 1–2.**
 
 ---
 
