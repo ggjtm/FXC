@@ -1,17 +1,17 @@
-package com.fxc.exchange;
+package com.fxc.common.instrument;
 
-import com.fxc.common.instrument.EquityInstrument;
-import com.fxc.common.instrument.FxSpotInstrument;
-import com.fxc.common.instrument.Instrument;
 import java.math.BigDecimal;
 import java.util.Currency;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
- * The instruments the exchange lists. The initial universe (docs/DESIGN.md §4.1) is a handful of
- * FX spot pairs plus fictional equities. Kept as a code-defined default for Phase 1; loading the
- * set from a config file is a straightforward extension (the engine/table seeding is
- * config-source agnostic).
+ * The shared instrument universe (docs/DESIGN.md §4.1): four FX spot pairs plus fictional equities.
+ * Lives in {@code fxc-common} so the exchange, broker, and investor all agree on the same symbols,
+ * tick/lot sizes, and settlement profiles. Code-defined default for now; loading from config is a
+ * straightforward extension.
  */
 public final class InstrumentCatalog {
 
@@ -38,5 +38,18 @@ public final class InstrumentCatalog {
                 EquityInstrument.of("ACME", "Acme Corporation", ccy("USD"), eqTick, eqLot),
                 EquityInstrument.of("GLOBEX", "Globex Corporation", ccy("USD"), eqTick, eqLot),
                 EquityInstrument.of("INITECH", "Initech LLC", ccy("USD"), eqTick, eqLot));
+    }
+
+    /** The default instruments keyed by symbol, preserving order. */
+    public static Map<String, Instrument> bySymbol() {
+        Map<String, Instrument> map = new LinkedHashMap<>();
+        for (Instrument instrument : defaults()) {
+            map.put(instrument.symbol(), instrument);
+        }
+        return map;
+    }
+
+    public static Optional<Instrument> find(String symbol) {
+        return Optional.ofNullable(bySymbol().get(symbol));
     }
 }

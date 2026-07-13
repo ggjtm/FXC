@@ -1,6 +1,7 @@
 # FXC Implementation Plan
 
-Status: **Phase 1 complete** (FxcExchange: matching, FIX, market data, clearing — 26 tests green).
+Status: **Phase 2 complete** (FxcBroker: GridGain accounts/positions, OMS + FIX-to-exchange, OFX
+server + custom order-entry message set — 28 tests green total). Phase 1 (FxcExchange) complete.
 Phase 0 done except the Tigase spike (gated on the AGPLv3 hold decision — PROBLEMS.md P2).
 Companion to [DESIGN.md](DESIGN.md).
 

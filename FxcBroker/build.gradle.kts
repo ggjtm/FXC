@@ -24,6 +24,9 @@ dependencies {
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // Exit-criteria integration test drives a *live* FxcExchange (PLAN Phase 2). Runtime modules
+    // stay independent; only the broker's integration test orchestrates both.
+    testImplementation(project(":FxcExchange"))
 }
 
 application {

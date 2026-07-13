@@ -3,6 +3,7 @@ package com.fxc.exchange;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.exchange.fix.ExchangeServer;
 import com.fxc.exchange.service.SettlementObligation;
 import java.io.ByteArrayInputStream;

@@ -1,6 +1,7 @@
 package com.fxc.exchange;
 
 import com.fxc.common.config.FxcConfig;
+import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.exchange.fix.ExchangeServer;
 import java.io.InputStream;
 import java.nio.file.Files;
