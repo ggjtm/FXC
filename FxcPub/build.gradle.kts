@@ -25,6 +25,10 @@ dependencies {
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // Exit-criteria integration test chains a live FxcExchange + FxcBroker + Tigase (PLAN Phase 3).
+    // Runtime modules stay independent; only this test orchestrates them together.
+    testImplementation(project(":FxcExchange"))
+    testImplementation(project(":FxcBroker"))
 }
 
 application {

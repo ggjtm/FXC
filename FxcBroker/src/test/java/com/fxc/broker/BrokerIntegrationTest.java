@@ -116,7 +116,8 @@ class BrokerIntegrationTest {
                      FixSettingsFactory.initiator("127.0.0.1", exchangeFixPort, "BROKER1", "EXCHANGE"),
                      "127.0.0.1", 0, "investor", "secret", "FXC-BROKER",
                      accounts -> accounts.seedAccount("000123456", "Dev Investor", "USD",
-                             Map.of("USD", new BigDecimal("1000000"))))) {
+                             Map.of("USD", new BigDecimal("1000000"))),
+                     null)) {
 
             liquidity.start();
             assertTrue(liquidity.awaitLogon(), "liquidity (BROKER2) should log on to the exchange");

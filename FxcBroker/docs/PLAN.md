@@ -17,7 +17,9 @@ Delivered:
    USD cash as `AVAILCASH`; other currency balances as `OtherPosition` FX pseudo-securities).
 5. [x] **Custom OFX order-entry message set** (`FXCORDMSGSRQV1`/`RSV1`) under
    `com.webcohesion.ofx4j.domain.data.fxc` so it round-trips (validated by `OfxOrderRoundTripTest`).
-6. [ ] **Publication on fill** — DEFERRED while FxcPub/Tigase is on hold (PROBLEMS.md B4).
+6. [~] **Publication on fill** — the **FIX drop-copy** leg to FxcPub is DONE (`BrokerDropCopyClient`,
+   wired via `BrokerServer`; forwards fills to FxcPub which publishes them to the broker's feed —
+   see FxcPub Phase 3). The **XMPP bot** leg (broker posts directly as its own account) is still open.
 7. [ ] **ArchiveService** (root Phase 5) — drain terminal orders/executions to `fxc_broker` MariaDB.
 
 **Exit criteria met**: `BrokerIntegrationTest` drives signon → order → fill → statement (position

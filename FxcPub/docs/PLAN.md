@@ -18,20 +18,30 @@ the client side (Smack). Phase 3 is underway.
    (`admin`/`broker`/`pub-service`/`investor`) from config. Proven by `PubSubRoundTripIT` (Smack
    publish→subscribe round-trip). Integration seam decided: **trusted Smack client** connections.
    See PROBLEMS.md "Phase-3 spike outcome".
-2. [~] **FxcPub XMPP-client services** (Smack): `XmppConnectionFactory` built and proven.
-   **Remaining:** a `PubSubClient` publish/subscribe wrapper and the GridGain-fed read models.
-3. [ ] **GridGain node + hot tables** `PUB_ACCOUNT`, `STATUS`, `FOLLOW` as projections fed by pubsub
-   events; `TimelineService` fan-out. (Reuse the `GridNode` pattern from FxcExchange.)
-4. [ ] **FIX drop-copy acceptor** (QuickFIX/J): receive `ExecutionReport`s from brokers, render as
-   statuses, publish via `FixGatewayService` acting as an XMPP client. **Not gated on Tigase** for
-   the acceptor + rendering; publishing is.
+2. [x] **FxcPub XMPP-client services** (Smack): `XmppConnectionFactory` + `PubSubClient`
+   (publish/subscribe wrapper). Integration seam: trusted Smack client.
+3. [x] **GridGain node + hot tables** `PUB_ACCOUNT`/`STATUS`/`FOLLOW` (`GridNode`, `PubTables`,
+   `PubRepository`); `TimelineService` records statuses into the STATUS projection and serves feed
+   reads. (Projection currently fed on publish; subscription-fed projection is a refinement.)
+4. [x] **FIX drop-copy acceptor** (`PubFixApplication`) + `FixGatewayService`: renders inbound
+   `ExecutionReport`s into statuses and publishes them to the broker's feed as an XMPP client.
+   FxcBroker gained its **drop-copy initiator** (`BrokerDropCopyClient`) forwarding fills.
 5. [ ] **ArchiveService** (root Phase 5): archive aged statuses to `fxc_pub` MariaDB; deep-history
    reads fall back to MariaDB.
 
-## Exit criteria (root Phase 3)
+## Exit criteria (root Phase 3) — **MET**
 
 A fill on FxcExchange appears as a status on the broker's feed, readable via an XMPP (Smack)
-subscription to the pubsub node.
+subscription to the pubsub node. Verified by `PubIntegrationIT` (live exchange + broker + FxcPub +
+Tigase + a subscriber).
+
+## Backlog / next
+- [ ] Broker's **XMPP bot** leg (human-readable post as the broker account) — the FIX drop-copy leg
+  is done; the direct-XMPP leg (DESIGN §4.2) is still open.
+- [ ] Subscription-fed projections (TimelineService subscribes to feeds rather than recording on
+  publish) + follow-graph fan-out.
+- [ ] Non-admin service accounts (currently provisioned as admins via the schema tool).
+- [ ] `ArchiveService` to MariaDB; consolidate `GridNode` into a shared `fxc-grid` module (B7).
 
 ## Deferred (NOT this component)
 

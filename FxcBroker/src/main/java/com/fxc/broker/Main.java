@@ -34,6 +34,9 @@ public final class Main {
         String exchangeHost = config.getString("fix.exchange.host", "localhost");
         int exchangePort = config.getInt("fix.exchange.port", 9876);
         String senderCompId = config.getString("fix.senderCompId", "BROKER1");
+        String pubHost = config.getString("fix.pub.host", "localhost");
+        int pubPort = config.getInt("fix.pub.port", 9878);
+        boolean dropCopyEnabled = config.getBoolean("fix.pub.enabled", true);
 
         String ofxHost = config.getString("ofx.http.host", "0.0.0.0");
         int ofxPort = config.getInt("ofx.http.port", 8082);
@@ -50,7 +53,10 @@ public final class Main {
                 FixSettingsFactory.initiator(exchangeHost, exchangePort, senderCompId, "EXCHANGE"),
                 ofxHost, ofxPort, ofxUser, ofxPassword, brokerId,
                 accounts -> accounts.seedAccount(devAccount, "Dev Investor", "USD",
-                        Map.of("USD", new BigDecimal("1000000"))));
+                        Map.of("USD", new BigDecimal("1000000"))),
+                dropCopyEnabled
+                        ? FixSettingsFactory.initiator(pubHost, pubPort, senderCompId, "FXCPUB")
+                        : null);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

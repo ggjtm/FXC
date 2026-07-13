@@ -45,6 +45,12 @@ public final class BrokerFixClient extends MessageCracker implements Application
     private final Initiator initiator;
     private final CountDownLatch logon = new CountDownLatch(1);
     private volatile SessionID exchangeSession;
+    private volatile DropCopyPublisher dropCopy = DropCopyPublisher.NONE;
+
+    /** Set the drop-copy publisher that forwards fills to FxcPub (default: no-op). */
+    public void setDropCopyPublisher(DropCopyPublisher dropCopy) {
+        this.dropCopy = dropCopy;
+    }
 
     public BrokerFixClient(SessionSettings settings, OmsService oms) throws Exception {
         this.oms = oms;
@@ -140,6 +146,13 @@ public final class BrokerFixClient extends MessageCracker implements Application
         boolean isReject = execType == ExecType.REJECTED || ordStatus == OrdStatus.REJECTED;
 
         oms.onExecutionReport(clOrdId, execId, exchangeOrderId, isFill, isReject, lastQty, lastPx, cumQty, text);
+
+        if (isFill && lastQty != null) {
+            // Drop-copy the fill to FxcPub (best-effort).
+            String symbol = report.getString(Symbol.FIELD);
+            String side = report.getChar(quickfix.field.Side.FIELD) == quickfix.field.Side.BUY ? "BUY" : "SELL";
+            dropCopy.publishFill(clOrdId, symbol, side, lastQty, lastPx);
+        }
     }
 
     /**

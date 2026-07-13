@@ -1,8 +1,9 @@
 # FXC Implementation Plan
 
-Status: **Phase 2 complete** (FxcBroker: GridGain accounts/positions, OMS + FIX-to-exchange, OFX
-server + custom order-entry message set — 28 tests green total). Phase 1 (FxcExchange) complete.
-Phase 0 done except the Tigase spike (gated on the AGPLv3 hold decision — PROBLEMS.md P2).
+Status: **Phase 3 complete** (FxcPub: stock unmodified Tigase running, GridGain projections, Smack
+XMPP-client services, FIX drop-copy → status published to the broker's feed — 30 tests green total,
+incl. two integration tests against a live Tigase). Phases 0–2 complete; the Tigase spike is done
+(AGPLv3 accepted via the unmodified-server strategy — PROBLEMS.md P2).
 Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes

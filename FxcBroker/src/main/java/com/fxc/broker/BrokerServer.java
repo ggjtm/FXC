@@ -6,6 +6,7 @@ import com.fxc.broker.grid.BrokerTables;
 import com.fxc.broker.grid.GridNode;
 import com.fxc.broker.ofx.OfxHttpServer;
 import com.fxc.broker.ofx.OfxService;
+import com.fxc.broker.oms.BrokerDropCopyClient;
 import com.fxc.broker.oms.BrokerFixClient;
 import com.fxc.broker.oms.OmsService;
 import java.util.concurrent.TimeUnit;
@@ -23,21 +24,28 @@ public final class BrokerServer implements AutoCloseable {
     private final AccountService accountService;
     private final OmsService omsService;
     private final BrokerFixClient fixClient;
+    private final BrokerDropCopyClient dropCopyClient;
     private final OfxHttpServer ofxServer;
 
     private BrokerServer(GridNode node, AccountService accountService, OmsService omsService,
-                         BrokerFixClient fixClient, OfxHttpServer ofxServer) {
+                         BrokerFixClient fixClient, BrokerDropCopyClient dropCopyClient, OfxHttpServer ofxServer) {
         this.node = node;
         this.accountService = accountService;
         this.omsService = omsService;
         this.fixClient = fixClient;
+        this.dropCopyClient = dropCopyClient;
         this.ofxServer = ofxServer;
     }
 
+    /**
+     * @param dropCopySettings FIX initiator settings for the drop-copy session to FxcPub, or
+     *                         {@code null} to run without publishing fills to FxcPub.
+     */
     public static BrokerServer start(String gridInstanceName, int gridDiscoveryPort, String workDir,
                                      SessionSettings fixInitiatorSettings,
                                      String ofxHost, int ofxPort, String ofxUser, String ofxPassword,
-                                     String brokerId, Consumer<AccountService> seeder) throws Exception {
+                                     String brokerId, Consumer<AccountService> seeder,
+                                     SessionSettings dropCopySettings) throws Exception {
         GridNode node = GridNode.start(gridInstanceName, gridDiscoveryPort, workDir);
         try {
             BrokerTables.createAll(node.ignite());
@@ -52,11 +60,19 @@ public final class BrokerServer implements AutoCloseable {
             // Best-effort: wait for the exchange session so routing works immediately.
             fixClient.awaitLogon(15, TimeUnit.SECONDS);
 
+            BrokerDropCopyClient dropCopyClient = null;
+            if (dropCopySettings != null) {
+                dropCopyClient = new BrokerDropCopyClient(dropCopySettings);
+                dropCopyClient.start();
+                dropCopyClient.awaitLogon(15, TimeUnit.SECONDS);
+                fixClient.setDropCopyPublisher(dropCopyClient);
+            }
+
             OfxService ofxService = new OfxService(omsService, accountService, ofxUser, ofxPassword, brokerId);
             OfxHttpServer ofxServer = new OfxHttpServer(ofxHost, ofxPort, "/ofx", ofxService);
             ofxServer.start();
 
-            return new BrokerServer(node, accountService, omsService, fixClient, ofxServer);
+            return new BrokerServer(node, accountService, omsService, fixClient, dropCopyClient, ofxServer);
         } catch (Exception e) {
             node.close();
             throw e;
@@ -82,6 +98,9 @@ public final class BrokerServer implements AutoCloseable {
     @Override
     public void close() {
         ofxServer.close();
+        if (dropCopyClient != null) {
+            dropCopyClient.close();
+        }
         fixClient.close();
         node.close();
     }
