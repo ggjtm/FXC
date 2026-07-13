@@ -12,4 +12,10 @@ Status: proposed | blocked | in-progress | done
 Relates to: PLAN item / DESIGN §
 ```
 
-No stories filed yet.
+## Filed
+
+- [001 — rando agent](001-rando-agent.md)
+- [002 — booker agent](002-booker-agent.md)
+- [003 — bookfish agent](003-bookfish-agent.md)
+- [004 — single-instance runner](004-single-instance-runner.md)
+- [005 — Gatling multi-agent runner](005-gatling-multi-agent-runner.md)

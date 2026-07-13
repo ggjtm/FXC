@@ -6,21 +6,32 @@ Scoped plan for the agent + CLI client. Companion to the root [docs/PLAN.md](../
 **Note:** FxcInvestor uses **MariaDB as its primary store** (not GridGain) and does not embed a
 GridGain node — so no Ignite `--add-opens` flags either.
 
-## Status: **not started** (root Phase 4; after FxcBroker)
+## Status: **in progress** (root Phase 4; Phases 0–3 complete)
 
 ## Plan (root Phase 4)
 
-1. [ ] **MariaDB persistence** (plain JDBC + `schema.sql`): agent config, decision log,
-   order/position mirror. Tables defined here (`AGENT_CONFIG`, `DECISION_LOG`, `ORDER_MIRROR`,
-   `POSITION_MIRROR`). Doubles as the archive.
-2. [ ] **OFX client** (OFX4J): signon to FxcBroker, statement sync, order submission via the custom
-   `FXC.ORDERMSGSRQV1` message set (shape finalized in FxcBroker Phase 2).
-3. [ ] **XMPP client** (Smack): home-timeline ingestion (input signal) + posting the agent's own
-   commentary to FxcPub. **Depends on FxcPub/Tigase** (currently on hold).
+1. [~] **MariaDB persistence** (plain JDBC + `schema.sql`): agent config, decision log,
+   order/position mirror. Best-effort decision log first; full mirror later.
+2. [x] **OFX client** (OFX4J): signon to FxcBroker, statement sync, order submission via the custom
+   `FXCORDMSGSRQV1` message set (now shared in `fxc-common` so broker + investor round-trip it).
+3. [ ] **XMPP client** (Smack): feed ingestion (last-sale + traded-volume signal) + posting.
+   FxcPub/Tigase is now available (Phase 3 done).
 4. [ ] **CLI REPL**: `buy sell positions orders feed post agent on|off quit`.
-5. [ ] **Strategy SPI** + built-in momentum/threshold demo strategy; decision loop wiring
-   (market view from statements/feed → `Strategy.evaluate` → order via OFX). Deterministic and
-   unit-testable.
+5. [~] **Strategy SPI** + agents + decision loop. The Strategy SPI and the **`rando`** agent +
+   single-instance runner are built; **`booker`** and **`bookfish`** are specified as stories.
+
+## Stories
+
+Agent strategies and runners are specified as stories in [stories/](stories/):
+
+- [001 — `rando`](stories/001-rando-agent.md): uniform-random side/qty; price target ±1% of last sale. **(implemented)**
+- [002 — `booker`](stories/002-booker-agent.md): price target from a quantity-weighted **order-book** histogram, ≤1σ from last sale.
+- [003 — `bookfish`](stories/003-bookfish-agent.md): price target from a **traded-volume** histogram, ≤0.5σ from last sale.
+- [004 — single-instance runner](stories/004-single-instance-runner.md): run one agent (OFX + optional feed) with a selectable strategy. **(in progress)**
+- [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): opt-in Gatling harness for perf testing + bulk simulation.
+
+All three agents share a pluggable `PriceTargetSampler` seam over a common agent shell; only the
+price-target distribution and σ filter differ.
 
 ## Exit criteria (root Phase 4)
 

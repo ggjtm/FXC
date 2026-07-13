@@ -1,5 +1,6 @@
 package com.fxc.broker.ofx;
 
+import com.fxc.common.ofx.OfxCodec;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.webcohesion.ofx4j.domain.data.RequestEnvelope;

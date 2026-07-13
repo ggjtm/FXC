@@ -45,6 +45,13 @@ public final class AccountService {
         return repository.accountExists(accountNumber);
     }
 
+    /** Seed an initial share position (dev/demo/tests). */
+    public synchronized void seedShares(String account, String symbol, BigDecimal quantity, BigDecimal avgPrice) {
+        Position p = new Position(account, symbol, HoldingType.SHARE, quantity, avgPrice);
+        positions.put(p.key(), p);
+        repository.upsertPosition(p);
+    }
+
     /**
      * Pre-trade check. Returns a rejection reason, or empty if the order is acceptable.
      * MARKET orders skip the notional cash check (price unknown up front) but equity sells still

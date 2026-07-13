@@ -19,6 +19,11 @@ dependencies {
 
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+    // Exit-criteria integration test drives a live FxcExchange + FxcBroker (PLAN Phase 4);
+    // the test's contra-liquidity client speaks FIX directly to the exchange.
+    testImplementation(project(":FxcExchange"))
+    testImplementation(project(":FxcBroker"))
+    testImplementation(libs.bundles.quickfixj)
 }
 
 application {

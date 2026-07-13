@@ -1,9 +1,9 @@
 # FXC Implementation Plan
 
-Status: **Phase 3 complete** (FxcPub: stock unmodified Tigase running, GridGain projections, Smack
-XMPP-client services, FIX drop-copy → status published to the broker's feed — 30 tests green total,
-incl. two integration tests against a live Tigase). Phases 0–2 complete; the Tigase spike is done
-(AGPLv3 accepted via the unmodified-server strategy — PROBLEMS.md P2).
+Status: **Phase 4 in progress** (FxcInvestor: Strategy SPI + pluggable price-sampler seam, the
+`rando` agent, OFX client, and single-instance runner — trades end-to-end over OFX and fills; 35
+tests green total. `booker`/`bookfish` agents + the Gatling multi-agent runner are specified as
+stories in FxcInvestor/docs/stories/). Phases 0–3 complete.
 Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes

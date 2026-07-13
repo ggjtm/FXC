@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fxc.broker.oms.FixSettingsFactory;
-import com.fxc.broker.ofx.OfxCodec;
+import com.fxc.common.ofx.OfxCodec;
 import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.exchange.fix.ExchangeServer;
 import com.webcohesion.ofx4j.domain.data.RequestEnvelope;

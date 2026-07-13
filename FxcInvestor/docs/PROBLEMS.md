@@ -12,11 +12,20 @@ FxcPub/Tigase, which is on hold pending AGPLv3 acceptance (root PROBLEMS.md P2).
 trading path (signon, statements, order entry, strategy loop) is independent — build and test that
 against FxcBroker first.
 
-## I2 — Custom OFX order-entry message set must match FxcBroker — **OPEN**
+## I2 — Custom OFX order-entry message set must match FxcBroker — **RESOLVED (Phase 4)**
 
-Order submission uses `FXC.ORDERMSGSRQV1`, whose shape is finalized in FxcBroker Phase 2 (root
-PROBLEMS.md P3/P4). Keep the shared constants (`com.fxc.common.ofx.OfxMessageSets`) as the single
-source of truth; do not diverge.
+The custom order-entry aggregates (`FXCORDMSGSRQV1`/`RSV1`, under
+`com.webcohesion.ofx4j.domain.data.fxc`) and the OFX codec (`com.fxc.common.ofx.OfxCodec`) now live
+in **fxc-common** (moved from FxcBroker), so broker (server) and investor (client) round-trip the
+exact same classes — no divergence possible. `fxc-common` gained an `api` dependency on ofx4j.
+
+## I5 — booker/bookfish need order-book market data — **OPEN (design)**
+
+`rando` needs only last-sale (from the feed/statement). `booker` (stories/002) needs live
+**order-book depth**, which the plain OFX/XMPP investor cannot see; plan is to feed a book snapshot
+into `MarketView` from the simulation/runner (e.g. a FIX market-data subscription to FxcExchange) or
+a future broker OFX quote extension. `bookfish` (stories/003) is self-contained — its traded-volume
+histogram is derivable from the FxcPub feed the investor already consumes.
 
 ## I3 — Static dev credentials — **OPEN (low)**
 

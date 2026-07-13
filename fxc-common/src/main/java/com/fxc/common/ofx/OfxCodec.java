@@ -1,4 +1,4 @@
-package com.fxc.broker.ofx;
+package com.fxc.common.ofx;
 
 import com.webcohesion.ofx4j.domain.data.RequestEnvelope;
 import com.webcohesion.ofx4j.domain.data.ResponseEnvelope;
