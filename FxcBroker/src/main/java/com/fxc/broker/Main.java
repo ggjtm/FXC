@@ -41,7 +41,7 @@ public final class Main {
         String ofxHost = config.getString("ofx.http.host", "0.0.0.0");
         int ofxPort = config.getInt("ofx.http.port", 8082);
         String ofxUser = config.getString("ofx.user", "investor");
-        String ofxPassword = config.getString("ofx.password", "investor");
+        String ofxPassword = config.getString("ofx.password", "secret");
         String brokerId = config.getString("ofx.brokerId", "FXC-BROKER");
         String devAccount = config.getString("account.dev", "000123456");
 

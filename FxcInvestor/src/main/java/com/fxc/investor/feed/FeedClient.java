@@ -3,6 +3,10 @@ package com.fxc.investor.feed;
 import com.fxc.investor.strategy.MarketView;
 import java.math.BigDecimal;
 import java.security.cert.X509Certificate;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.net.ssl.X509TrustManager;
@@ -31,10 +35,13 @@ public final class FeedClient implements AutoCloseable {
 
     private static final Pattern FILL = Pattern.compile(
             "FILLED:\\s*(BUY|SELL)\\s+([0-9]+(?:\\.[0-9]+)?)\\s+(\\S+)\\s+@\\s+([0-9]+(?:\\.[0-9]+)?)");
+    private static final Pattern STATUS_BODY = Pattern.compile("<status[^>]*>(.*?)</status>", Pattern.DOTALL);
+    private static final int RECENT_LIMIT = 50;
 
     private final String host;
     private final int port;
     private final String domain;
+    private final Deque<String> recent = new ArrayDeque<>();
     private XMPPTCPConnection connection;
     private PubSubManager pubSub;
 
@@ -69,10 +76,32 @@ public final class FeedClient implements AutoCloseable {
         LeafNode node = pubSub.getOrCreateLeafNode(feedNode(brokerId));
         node.addItemEventListener(event -> {
             for (Object item : event.getItems()) {
-                ingest(String.valueOf(item), market);
+                record(String.valueOf(item), market);
             }
         });
         node.subscribe(connection.getUser().asEntityBareJidString());
+    }
+
+    /** Buffer a received status (for the CLI {@code feed} command) and fold any fill into market. */
+    private void record(String itemXml, MarketView market) {
+        Matcher body = STATUS_BODY.matcher(itemXml);
+        String text = body.find() ? body.group(1) : itemXml;
+        synchronized (recent) {
+            recent.addLast(text);
+            while (recent.size() > RECENT_LIMIT) {
+                recent.removeFirst();
+            }
+        }
+        ingest(itemXml, market);
+    }
+
+    /** The most recent {@code n} feed statuses, oldest first. */
+    public List<String> recentStatuses(int n) {
+        synchronized (recent) {
+            List<String> all = new ArrayList<>(recent);
+            int from = Math.max(0, all.size() - n);
+            return new ArrayList<>(all.subList(from, all.size()));
+        }
     }
 
     /** Post a status to a feed (the agent's own commentary). */

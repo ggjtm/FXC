@@ -5,6 +5,32 @@ Status per entry: **OPEN**, **RESOLVED**, or **MITIGATED**.
 
 ---
 
+## B9 — OFX signon credential defaults diverged (broker rejects the investor) — **RESOLVED**
+
+**Discovered:** running the FxcInvestor REPL against a **standalone** broker (separate JVMs from
+the app distributions). Every order came back `NO_RESPONSE` and `positions` showed no cash even
+though the broker seeded USD 1,000,000.
+
+**Root cause.** The two `Main`s had mismatched **default** OFX credentials:
+`FxcBroker/Main` defaulted `ofx.password` to **`"investor"`** (a copy-paste of the `ofx.user`
+default on the line above), while `FxcInvestor/Main` sent **`"secret"`**. With no conf file loaded
+from the repo-root CWD, both fell back to their defaults, so signon validation failed. The raw OFX
+response confirmed it: `SIGNONMSGSRSV1 / SONRS / STATUS / CODE 15500` (`SIGNON_INVALID`).
+
+Because `OfxService.handle` only processes statement/order message sets **inside `if (authOk)`**, a
+failed signon silently yields a signon-error-only response — so no order routes to the exchange
+(0 `NewOrderSingle`), the investor sees `NO_RESPONSE`, and statements come back empty. The embedded
+integration tests never caught it because they pass matching creds (`"investor"/"secret"`) to both
+`BrokerServer.start` and `OfxBrokerClient` explicitly.
+
+**Fix.** Aligned the broker's `ofx.password` default to `"secret"`, and pinned `ofx.user`/
+`ofx.password` explicitly in **both** `conf/fxcbroker.conf` and `conf/fxcinvestor.conf` so the two
+sides can't drift again. Verified end-to-end: an investor order now routes and fills, and the fill
+shows up on the investor's statement.
+
+**Lesson.** Cross-component credential/config contracts need a single source of truth (or an
+integration test across the actual `Main`s), not per-component defaults that can silently diverge.
+
 ## B1 — OFX4J server side is thin — **RESOLVED (Phase 2)**
 
 Root PROBLEMS.md P3 / DESIGN §6.5. Confirmed: we bypass the Jakarta `OFXServlet` and drive

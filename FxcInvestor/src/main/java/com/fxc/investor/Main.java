@@ -46,6 +46,10 @@ public final class Main {
         int ticks = config.getInt("agent.ticks", 10); // 0 = run until interrupted
         long seed = config.getInt("agent.seed", 42);
         boolean enabled = config.getBoolean("agent.enabled", true);
+        String mode = config.getString("mode", "headless"); // headless | repl
+
+        String xmppUser = config.getString("xmpp.user", "investor");
+        String feedBroker = config.getString("xmpp.feedBroker", "BROKER1");
 
         OfxBrokerClient broker = new OfxBrokerClient(ofxUrl, ofxUser, ofxPassword, brokerId);
         Strategy strategy = Strategies.byName(strategyName);
@@ -59,13 +63,14 @@ public final class Main {
             String xmppHost = config.getString("xmpp.host", "localhost");
             int xmppPort = config.getInt("xmpp.port", 5222);
             String xmppDomain = config.getString("xmpp.domain", "fxc.local");
-            String xmppUser = config.getString("xmpp.user", "investor");
             String xmppPassword = config.getString("xmpp.password", "secret");
-            String feedBroker = config.getString("xmpp.feedBroker", "BROKER1");
             try {
                 feed = new FeedClient(xmppHost, xmppPort, xmppDomain);
                 feed.connect(xmppUser, xmppPassword);
                 feed.subscribeFeed(feedBroker, market);
+                if ("repl".equalsIgnoreCase(mode)) {
+                    feed.subscribeFeed(xmppUser, market); // own feed, so `post` round-trips into `feed`
+                }
                 System.out.println("Subscribed to XMPP feed " + FeedClient.feedNode(feedBroker)
                         + " at " + xmppHost + ":" + xmppPort);
             } catch (Exception e) {
@@ -94,6 +99,13 @@ public final class Main {
                 storeRef.close();
             }
         }));
+
+        // Interactive mode: hand off to the REPL (buy/sell/positions/orders/feed/post/agent/quit).
+        if ("repl".equalsIgnoreCase(mode)) {
+            new com.fxc.investor.cli.Repl(broker, market, agent, feed, store, account, symbol,
+                    strategyName, xmppUser, intervalMs).run();
+            return;
+        }
 
         System.out.println("FxcInvestor starting (strategy=" + strategyName + ", symbol=" + symbol
                 + ", account=" + account + ", agent " + (enabled ? "on" : "off")
