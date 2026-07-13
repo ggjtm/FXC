@@ -29,7 +29,7 @@ Agent strategies and runners are specified as stories in [stories/](stories/):
 - [002 — `booker`](stories/002-booker-agent.md): price target from a quantity-weighted **order-book** histogram, ≤1σ from last sale. **(implemented)**
 - [003 — `bookfish`](stories/003-bookfish-agent.md): price target from a **traded-volume** histogram, ≤0.5σ from last sale. **(implemented)**
 - [004 — single-instance runner](stories/004-single-instance-runner.md): run one agent (OFX + live XMPP feed) with a selectable strategy. **(in progress — feed wired; CLI REPL pending)**
-- [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): opt-in Gatling harness for perf testing + bulk simulation.
+- [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): opt-in Gatling harness for perf testing + bulk simulation. **(implemented — `./gradlew :FxcInvestor:gatlingRun`)**
 
 **Note (booker data source):** `booker`'s order-book histogram needs live book depth, which the
 plain OFX/XMPP investor doesn't see — it falls back to `rando` behavior until fed a book snapshot

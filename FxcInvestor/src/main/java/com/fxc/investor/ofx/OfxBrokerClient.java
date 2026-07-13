@@ -70,6 +70,27 @@ public final class OfxBrokerClient {
     /** Submit an order; returns the broker's order status (e.g. {@code ROUTED}, {@code REJECTED}). */
     public String submitOrder(String account, String clOrdId, String symbol, Side side,
                               BigDecimal price, BigDecimal quantity) throws Exception {
+        ResponseEnvelope response = post(orderEnvelope(account, clOrdId, symbol, side, price, quantity));
+        for (ResponseMessageSet rs : response.getMessageSets()) {
+            if (rs instanceof FxcOrderResponseMessageSet ord && ord.getOrderResponse() != null
+                    && ord.getOrderResponse().getMessage() != null) {
+                return ord.getOrderResponse().getMessage().getOrderStatus();
+            }
+        }
+        return "NO_RESPONSE";
+    }
+
+    /**
+     * Build the marshalled OFX order-request bytes without sending them. Used by the Gatling
+     * simulation, which drives the HTTP itself while reusing this production request-building.
+     */
+    public byte[] marshalOrder(String account, String clOrdId, String symbol, Side side,
+                               BigDecimal price, BigDecimal quantity) {
+        return OfxCodec.marshalRequest(orderEnvelope(account, clOrdId, symbol, side, price, quantity));
+    }
+
+    private RequestEnvelope orderEnvelope(String account, String clOrdId, String symbol, Side side,
+                                          BigDecimal price, BigDecimal quantity) {
         FxcOrderRequest order = new FxcOrderRequest();
         order.setAccountId(account);
         order.setSecurityId(securityId(symbol));
@@ -90,15 +111,7 @@ public final class OfxBrokerClient {
         TreeSet<RequestMessageSet> sets = new TreeSet<>();
         sets.add(set);
         withSignon(env, sets);
-
-        ResponseEnvelope response = post(env);
-        for (ResponseMessageSet rs : response.getMessageSets()) {
-            if (rs instanceof FxcOrderResponseMessageSet ord && ord.getOrderResponse() != null
-                    && ord.getOrderResponse().getMessage() != null) {
-                return ord.getOrderResponse().getMessage().getOrderStatus();
-            }
-        }
-        return "NO_RESPONSE";
+        return env;
     }
 
     /**

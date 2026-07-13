@@ -1,7 +1,28 @@
 # Multi-agent Gatling runner (performance & bulk simulation)
 
-Status: proposed
+Status: implemented (Gatling 3.13.5 Java DSL; `gatling` source set + `gatlingRun` task)
 Relates to: [004](004-single-instance-runner.md); root PLAN Phase 6 (demo/hardening)
+
+## How to run
+
+Against a running broker (and exchange):
+
+```
+./gradlew :FxcInvestor:gatlingRun \
+  -Dsim.users=50 -Dsim.ordersPerUser=20 -Dsim.rampSeconds=30 -Dsim.profile=ramp \
+  -Dsim.mix.rando=80 -Dsim.mix.booker=15 \
+  -Dfxc.ofx.url=http://localhost:8082/ofx
+```
+
+Knobs (all system properties): `fxc.ofx.url|user|password|brokerId`, `fxc.account`, `sim.symbol`,
+`sim.basePrice`, `sim.users`, `sim.rampSeconds`, `sim.ordersPerUser`, `sim.pauseMs`, `sim.seed`,
+`sim.profile` (`ramp|steady|spike`), `sim.ratePerSec` (steady), `sim.mix.rando`, `sim.mix.booker`
+(remainder = bookfish), and the assertion thresholds `sim.maxP95Ms`, `sim.maxP99Ms`,
+`sim.maxErrorPct`. The simulation is `com.fxc.investor.sim.FxcInvestorSimulation`.
+
+**Verified:** a smoke run drove a rando/booker/bookfish population against a live broker OFX endpoint
+(24 requests, 0 failures, p95 10ms) and emitted a Gatling report. `gatlingRun` is opt-in — it is not
+part of the default `build`/`test`.
 
 ## Summary
 

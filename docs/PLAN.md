@@ -1,9 +1,9 @@
 # FXC Implementation Plan
 
 Status: **Phase 4 in progress** (FxcInvestor: Strategy SPI + all three agents — `rando`, `booker`,
-`bookfish` — over a shared price-sampler seam; OFX client; single-instance runner; live XMPP feed
-ingestion into the MarketView. 43 tests green total. Remaining: CLI REPL, MariaDB decision log, and
-the Gatling multi-agent runner — see FxcInvestor/docs/stories/). Phases 0–3 complete.
+`bookfish`; OFX client; single-instance runner; live XMPP feed ingestion; the broker order-book
+relay feeding `booker`; and the opt-in **Gatling multi-agent runner** for perf/bulk simulation.
+46 tests green total. Remaining: CLI REPL + MariaDB decision log). Phases 0–3 complete.
 Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
