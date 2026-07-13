@@ -54,15 +54,17 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
   interacts with Tigase strictly as a standard XMPP client** (Smack). The FxcPub deliverable is
   the GridGain + XMPP-client application layer plus Tigase configuration, not a server. See
   DESIGN §4.3 for the rationale (upgrade safety, AGPL isolation, portability).
-- **JDK 21 support — mostly confirmed, verify in spike.** Documented minimum is **JDK 17**; the
-  official Docker image builds on **21** (so 21 works in practice), but there is no explicit
-  "certified on 21" statement. Low risk given we run the vendor Docker image.
-- **License — AGPLv3. DECISION: HOLD (2026-07-13).** Tigase XMPP Server is **AGPLv3** (separate
-  commercial license available). Running it as a separate, **unmodified** process (the P1 decision)
-  means its copyleft does not automatically extend to FxcPub — but this is a legal judgment to
-  confirm, and contrasts with the permissive licenses elsewhere (QuickFIX/J BSD-style, OFX4J
-  Apache-2.0). Jeremy chose to **hold**: the Tigase image is not to be pulled/run yet, so the
-  Phase-0 spike stays un-run and FxcPub (Phase 3) remains gated. Phases 1–2 proceed regardless.
+- **JDK — Tigase must run on 17, RESOLVED.** Tigase 8.4.1 bundles a Groovy whose ASM cannot read
+  Java 21 class files (`Unsupported class file major version 65`), so the server fails to start on
+  JDK 21/25. Our Tigase image is based on `eclipse-temurin:17-jre`. Because Tigase runs as a
+  separate container, FXC's own components remain on JDK 21 — no conflict.
+- **License — AGPLv3. DECISION: ACCEPTED via the unmodified-server strategy (2026-07-13).** Tigase
+  XMPP Server is **AGPLv3** (separate commercial license available). Jeremy accepted the approach:
+  run Tigase **100% unmodified** to avoid triggering AGPLv3 constraints — customization is limited
+  to **server-side configuration** (`config.tdsl`/`dataSource`) and **custom client-side features**
+  (Smack), with no source modified or distributed (DESIGN §4.3). This lifts the earlier hold; the
+  Phase-0/Phase-3 Tigase spike may now run. Legal confirmation still advised, but no covered work
+  is modified or conveyed.
 - **Integration seam (XMPP-client side).** Decide how FxcPub's XMPP-client services publish into
   and read from Tigase PubSub — the documented paths are a **trusted/admin Smack client
   connection** or **ad-hoc commands**. (Tigase's own REST API is a candidate for the *deferred*
@@ -75,9 +77,30 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
   consistent with FxcBroker/FxcExchange. A GridGain-backed custom Tigase `DataSource` is a
   possible future optimization, **not** a goal.
 
-### Phase-0 spike status (2026-07-13)
+### Phase-3 spike outcome (2026-07-13) — **Tigase running; gate cleared**
 
-Progress so far, and what remains before the gate is cleared:
+The Tigase server is up and reachable (c2s `127.0.0.1:5222` open; also 5223/5269/5280/8080). Getting
+there surfaced three real issues, all resolved without modifying Tigase's code:
+
+- **Official image is a non-runnable skeleton.** `tigase/tigase-xmpp-server:8.4.1` is a bare JRE
+  (Java 25) with empty `jars/`/`conf/` volume dirs and no launch script — it does not self-run.
+  **Fix:** `docker/tigase/Dockerfile` builds a thin image that fetches the **genuine unmodified
+  community `-dist` tarball** (GitHub release) and runs it via the shipped `scripts/tigase.sh`.
+- **JDK: must be 17, not 21+.** Tigase 8.4.1 bundles a Groovy whose ASM can't read Java 21 class
+  files (`Unsupported class file major version 65`). **Fix:** base the Tigase image on
+  `eclipse-temurin:17-jre`. It runs as a separate container, so FXC's own components stay on 21.
+  (Updates P5 below.)
+- **MariaDB FK-signedness incompatibility.** Tigase's MySQL schema declares
+  `tig_broadcast_recipients.jid_id` as signed `BIGINT` but parent `tig_broadcast_jids.jid_id` as
+  `BIGINT UNSIGNED`; MySQL tolerates it, MariaDB rejects it (errno 150), aborting the schema load.
+  **Fix (Jeremy's call):** patch that one column to `BIGINT UNSIGNED` via a one-shot init step
+  (`docker/tigase/init-schema.sh`, run as the `tigase-init` compose service) that patches a
+  writable copy at runtime and loads the schema — the vendor files baked in the image stay pristine.
+
+Remaining: the Smack publish/subscribe round-trip is validated by the FxcPub integration test
+(Phase 3), which runs against this container.
+
+### Phase-0 spike status (2026-07-13) — superseded by the Phase-3 outcome above
 
 - **Docker image name corrected.** The reference docs said `tigase/tigase-server`; the actual
   official image is **`tigase/tigase-xmpp-server`** (tag `8.4.1` confirmed to exist on Docker Hub).

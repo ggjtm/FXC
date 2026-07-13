@@ -28,20 +28,39 @@ services:
       timeout: 5s
       retries: 10
 
+  # One-shot init (docker-compose analog of a K8s initContainer): loads Tigase's schema into
+  # MariaDB with the FK-signedness compatibility fix, then exits. `tigase` waits for it to complete.
+  tigase-init:
+    build:
+      context: ./docker/tigase
+    image: fxc/tigase:8.4.1
+    container_name: fxc-tigase-init
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    entrypoint: ["/init-schema.sh"]
+    restart: "no"
+
   tigase:
-    image: tigase/tigase-xmpp-server:8.4.1
+    # Builds a thin image around the UNMODIFIED Tigase 8.4.1 community dist on JDK 21 (the official
+    # tigase/tigase-xmpp-server image is a non-runnable skeleton — see docker/tigase/Dockerfile).
+    image: fxc/tigase:8.4.1
     container_name: fxc-tigase
     depends_on:
       mariadb:
         condition: service_healthy
+      tigase-init:
+        condition: service_completed_successfully
     ports:
       - "5222:5222"   # client-to-server (XMPP c2s) — Smack connects here
       - "5269:5269"   # server-to-server
       - "5280:5280"   # HTTP (BOSH / WebSocket / REST)
       - "8080:8080"   # HTTP admin UI
+    # NOTE: config.tdsl is baked into the image (Dockerfile COPY), NOT bind-mounted — Tigase
+    # rewrites/backs up its config on startup, which fails against a mounted file. Edit
+    # docker/tigase/config.tdsl and rebuild to change server config.
     volumes:
-      - ./docker/tigase/config.tdsl:/home/tigase/tigase-server/etc/config.tdsl:ro
-      - fxc-tigase-logs:/home/tigase/tigase-server/logs
+      - fxc-tigase-logs:/opt/tigase/logs
 
 volumes:
   fxc-mariadb-data:

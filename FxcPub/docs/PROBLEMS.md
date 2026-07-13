@@ -5,11 +5,11 @@ Status per entry: **OPEN**, **RESOLVED**, or **MITIGATED**.
 
 ---
 
-## P-1 — Tigase AGPLv3 acceptance — **OPEN (HOLD)**
+## P-1 — Tigase AGPLv3 acceptance — **RESOLVED (accepted, 2026-07-13)**
 
-Root PROBLEMS.md P2. Running the stock Tigase image is using AGPLv3 software. Jeremy chose to
-**HOLD**; the Phase-0 spike is un-run and this component is blocked. The unmodified-external design
-isolates the copyleft, but the acceptance is a business decision to confirm before proceeding.
+Root PROBLEMS.md P2. Jeremy accepted the unmodified-server strategy: Tigase runs 100% unmodified to
+avoid triggering AGPLv3 constraints; customization is limited to server-side configuration and
+custom client-side (Smack) features (DESIGN §4.3). Hold lifted — Phase 3 proceeds.
 
 ## P-2 — Tigase deployment model — **RESOLVED**
 

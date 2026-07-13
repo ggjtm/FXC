@@ -158,15 +158,26 @@ actively maintained, scale-oriented, and shipping a substantially more complete 
 component. FxcPub separates cleanly into an **XMPP server** (stock Tigase) and an **application
 layer** (FXC's own code), which are joined *only* through standard XMPP.
 
-**Design principle — Tigase runs 100% unmodified.** FxcPub adds **no** custom Tigase plugins,
-components, processors, or patched builds; it runs the vendor distribution as-is (docker-compose
-service, image `tigase/tigase-xmpp-server`), configured only through supported `config.tdsl` and
-`dataSource` settings. All FXC-specific behavior lives in the application layer, which interacts
-with Tigase strictly as a **standard XMPP client** over the wire (Smack). Rationale:
+**Design principle — Tigase runs 100% unmodified to avoid triggering AGPLv3 constraints.** The
+FXC customization boundary is explicit and has exactly two sides:
 
+1. **Server side — configuration only.** Tigase runs as the **unmodified** vendor distribution
+   (docker-compose service, image `tigase/tigase-xmpp-server`). FXC adds **no** custom Tigase
+   plugins, components, processors, or patched builds — the only server-side inputs are supported
+   `config.tdsl` and `dataSource` settings (virtual host, components enabled, JDBC repository).
+   Because the binary is unchanged and run as a separate process, AGPLv3's copyleft (which attaches
+   to *modified* or *conveyed* versions of the covered work) is not triggered against FXC code.
+2. **Client side — custom features via standard XMPP.** All FXC-specific behavior lives in the
+   application layer as **standard XMPP clients** (Smack) talking to Tigase over the wire. This is
+   where custom features go (feed projections, FIX-gateway rendering, timeline fan-out); none of it
+   links against or derives from Tigase's AGPLv3 source.
+
+Rationale:
+
+- **AGPLv3 avoidance** — an unmodified server run as a separate network service, spoken to only via
+  standard XMPP, keeps Tigase's network copyleft off FXC's own code. (Legal confirmation still
+  advised, but no source is modified or distributed.) See PROBLEMS.md P2.
 - **Upgrade safety & simplicity** — we can track Tigase releases without reconciling a fork.
-- **AGPLv3 isolation** — running Tigase unmodified as a separate process keeps its network
-  copyleft from reaching into FXC code (PROBLEMS.md P2; legal confirmation still advised).
 - **Portability** — because we only depend on standard XMPP + XEP-0060, Tigase could later be
   swapped for another compliant server with no application changes.
 

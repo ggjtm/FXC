@@ -6,19 +6,20 @@ Scoped plan for the XMPP-native publication component. Companion to the root
 **Design principle:** stock Tigase runs **100% unmodified** as an external service; FxcPub's own
 code is a set of **XMPP clients** (Smack). Mastodon REST is deferred to the Phase-7 gateway addon.
 
-## Status: **blocked** — gated on the Tigase spike / AGPLv3 decision (root PROBLEMS.md P2)
+## Status: **in progress** — AGPLv3 accepted via the unmodified-server strategy (root PROBLEMS.md P2)
 
-Jeremy chose to **HOLD** on running the Tigase image. Until that changes, the FIX drop-copy leg and
-GridGain projections can be designed/stubbed, but the XMPP round-trip cannot be validated.
+The hold is lifted: Tigase runs 100% unmodified (server-side config only) with custom features on
+the client side (Smack). Phase 3 is underway.
 
 ## Plan (root Phase 3)
 
-1. [ ] **Stand up stock Tigase** as an external docker-compose service with PubSub + repository
-   schema on MariaDB; provision accounts (incl. trusted service accounts) from config.
-   **Gated** — needs the Phase-0 spike + AGPLv3 acceptance first.
-2. [ ] **FxcPub XMPP-client services** (Smack): publish to / subscribe from Tigase PubSub. No
-   server-side Tigase code. Decide the integration seam (trusted admin Smack client vs ad-hoc
-   commands — root PROBLEMS.md P2).
+1. [x] **Stand up stock Tigase** — DONE. `docker/tigase/` builds the unmodified dist on JDK 17;
+   `tigase-init` loads the schema (with the MariaDB FK fix) and provisions trusted service accounts
+   (`admin`/`broker`/`pub-service`/`investor`) from config. Proven by `PubSubRoundTripIT` (Smack
+   publish→subscribe round-trip). Integration seam decided: **trusted Smack client** connections.
+   See PROBLEMS.md "Phase-3 spike outcome".
+2. [~] **FxcPub XMPP-client services** (Smack): `XmppConnectionFactory` built and proven.
+   **Remaining:** a `PubSubClient` publish/subscribe wrapper and the GridGain-fed read models.
 3. [ ] **GridGain node + hot tables** `PUB_ACCOUNT`, `STATUS`, `FOLLOW` as projections fed by pubsub
    events; `TimelineService` fan-out. (Reuse the `GridNode` pattern from FxcExchange.)
 4. [ ] **FIX drop-copy acceptor** (QuickFIX/J): receive `ExecutionReport`s from brokers, render as
