@@ -55,16 +55,20 @@ public final class OfxService {
     private static final String FX_ID_TYPE = "FXC";
     private static final String FX_PREFIX = "FX:";
 
+    private static final int MAX_BOOK_DEPTH = 10;
+
     private final OmsService oms;
     private final AccountService accounts;
+    private final com.fxc.broker.md.MarketDataCache marketData;
     private final String expectedUser;
     private final String expectedPassword;
     private final String brokerId;
 
-    public OfxService(OmsService oms, AccountService accounts, String expectedUser,
-                      String expectedPassword, String brokerId) {
+    public OfxService(OmsService oms, AccountService accounts, com.fxc.broker.md.MarketDataCache marketData,
+                      String expectedUser, String expectedPassword, String brokerId) {
         this.oms = oms;
         this.accounts = accounts;
+        this.marketData = marketData;
         this.expectedUser = expectedUser;
         this.expectedPassword = expectedPassword;
         this.brokerId = brokerId;
@@ -87,6 +91,8 @@ public final class OfxService {
                     responseSets.add(statementResponse(stmt));
                 } else if (set instanceof FxcOrderRequestMessageSet order) {
                     responseSets.add(orderResponse(order));
+                } else if (set instanceof com.webcohesion.ofx4j.domain.data.fxc.FxcBookRequestMessageSet book) {
+                    responseSets.add(bookResponse(book));
                 }
             }
         }
@@ -237,6 +243,44 @@ public final class OfxService {
 
         FxcOrderResponseMessageSet set = new FxcOrderResponseMessageSet();
         set.setOrderResponse(txn);
+        return set;
+    }
+
+    // --- order-book snapshot relay (FxcBroker/docs/stories/001) ---
+
+    private com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponseMessageSet bookResponse(
+            com.webcohesion.ofx4j.domain.data.fxc.FxcBookRequestMessageSet request) {
+        var txn = new com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponseTransaction();
+        var body = new com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponse();
+
+        var reqTxn = request.getBookRequest();
+        if (reqTxn == null || reqTxn.getMessage() == null || marketData == null) {
+            txn.setStatus(status(Status.KnownCode.GENERAL_ERROR, Status.Severity.ERROR));
+            txn.setMessage(body);
+            var set = new com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponseMessageSet();
+            set.setBookResponse(txn);
+            return set;
+        }
+
+        var reqBody = reqTxn.getMessage();
+        String symbol = symbolFromSecurityId(reqBody.getSecurityId());
+        int depth = reqBody.getDepth() == null ? MAX_BOOK_DEPTH : Math.min(reqBody.getDepth(), MAX_BOOK_DEPTH);
+
+        List<com.webcohesion.ofx4j.domain.data.fxc.FxcBookLevel> levels = new ArrayList<>();
+        for (com.fxc.broker.md.BookLevel level : marketData.topOfBook(symbol, depth)) {
+            levels.add(new com.webcohesion.ofx4j.domain.data.fxc.FxcBookLevel(
+                    level.side(), level.price().doubleValue(), level.size().doubleValue()));
+        }
+        body.setSecurityId(reqBody.getSecurityId());
+        marketData.lastPrice(symbol).ifPresent(p -> body.setLastPrice(p.doubleValue()));
+        body.setLevels(levels);
+
+        txn.setUID(reqTxn.getUID());
+        txn.setStatus(status(Status.KnownCode.SUCCESS, Status.Severity.INFO));
+        txn.setMessage(body);
+
+        var set = new com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponseMessageSet();
+        set.setBookResponse(txn);
         return set;
     }
 

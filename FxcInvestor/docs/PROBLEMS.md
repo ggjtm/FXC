@@ -19,13 +19,13 @@ The custom order-entry aggregates (`FXCORDMSGSRQV1`/`RSV1`, under
 in **fxc-common** (moved from FxcBroker), so broker (server) and investor (client) round-trip the
 exact same classes — no divergence possible. `fxc-common` gained an `api` dependency on ofx4j.
 
-## I5 — booker/bookfish need order-book market data — **OPEN (design)**
+## I5 — booker/bookfish need order-book market data — **RESOLVED**
 
-`rando` needs only last-sale (from the feed/statement). `booker` (stories/002) needs live
-**order-book depth**, which the plain OFX/XMPP investor cannot see; plan is to feed a book snapshot
-into `MarketView` from the simulation/runner (e.g. a FIX market-data subscription to FxcExchange) or
-a future broker OFX quote extension. `bookfish` (stories/003) is self-contained — its traded-volume
-histogram is derivable from the FxcPub feed the investor already consumes.
+`rando` needs only last-sale (from the feed). `bookfish` (stories/003) is self-contained — its
+traded-volume histogram is built from the FxcPub feed. `booker` (stories/002) needs live
+**order-book depth**, now supplied by the **broker order-book-snapshot relay** (FxcBroker/docs/
+stories/001): `OfxBrokerClient.requestBook` fetches depth over OFX and the runner feeds it into
+`MarketView.setBook` each tick. Verified end-to-end by `BookRelayIntegrationTest`.
 
 ## I3 — Static dev credentials — **OPEN (low)**
 

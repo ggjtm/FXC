@@ -11,8 +11,9 @@ import java.util.List;
  */
 public interface MarketDataPublisher {
 
+    /** Publish a full snapshot carrying up to N bid and ask levels (depth), best first. */
     void publishSnapshot(Object target, String mdReqId, String symbol,
-                         OrderBook.Level bid, OrderBook.Level ask);
+                         List<OrderBook.Level> bids, List<OrderBook.Level> asks);
 
     void publishIncremental(Object target, String mdReqId, String symbol,
                             OrderBook.Level bid, OrderBook.Level ask, List<Trade> trades);

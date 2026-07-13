@@ -181,16 +181,16 @@ public final class ExchangeApplication extends MessageCracker implements Applica
 
     @Override
     public void publishSnapshot(Object target, String mdReqId, String symbol,
-                                OrderBook.Level bid, OrderBook.Level ask) {
+                                List<OrderBook.Level> bids, List<OrderBook.Level> asks) {
         quickfix.fix44.MarketDataSnapshotFullRefresh snap = new quickfix.fix44.MarketDataSnapshotFullRefresh();
         snap.set(new MDReqID(mdReqId));
         snap.set(new Symbol(symbol));
         int entries = 0;
-        if (bid != null) {
+        for (OrderBook.Level bid : bids) {
             snap.addGroup(snapshotEntry(MDEntryType.BID, bid));
             entries++;
         }
-        if (ask != null) {
+        for (OrderBook.Level ask : asks) {
             snap.addGroup(snapshotEntry(MDEntryType.OFFER, ask));
             entries++;
         }

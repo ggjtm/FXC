@@ -1,6 +1,7 @@
 package com.fxc.investor.ofx;
 
 import com.fxc.common.ofx.OfxCodec;
+import com.fxc.investor.strategy.MarketView;
 import com.fxc.investor.strategy.PortfolioView;
 import com.fxc.investor.strategy.Side;
 import com.webcohesion.ofx4j.domain.data.RequestEnvelope;
@@ -10,6 +11,11 @@ import com.webcohesion.ofx4j.domain.data.ResponseMessageSet;
 import com.webcohesion.ofx4j.domain.data.fxc.FxcOrderRequest;
 import com.webcohesion.ofx4j.domain.data.fxc.FxcOrderRequestMessageSet;
 import com.webcohesion.ofx4j.domain.data.fxc.FxcOrderRequestTransaction;
+import com.webcohesion.ofx4j.domain.data.fxc.FxcBookLevel;
+import com.webcohesion.ofx4j.domain.data.fxc.FxcBookRequest;
+import com.webcohesion.ofx4j.domain.data.fxc.FxcBookRequestMessageSet;
+import com.webcohesion.ofx4j.domain.data.fxc.FxcBookRequestTransaction;
+import com.webcohesion.ofx4j.domain.data.fxc.FxcBookResponseMessageSet;
 import com.webcohesion.ofx4j.domain.data.fxc.FxcOrderResponseMessageSet;
 import com.webcohesion.ofx4j.domain.data.investment.accounts.InvestmentAccountDetails;
 import com.webcohesion.ofx4j.domain.data.investment.positions.BasePosition;
@@ -29,10 +35,13 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * FxcInvestor's OFX client to FxcBroker (docs/DESIGN.md §4.4): signon, order submission via the
@@ -49,6 +58,7 @@ public final class OfxBrokerClient {
     private final String password;
     private final String brokerId;
     private final HttpClient http = HttpClient.newHttpClient();
+    private final AtomicLong bookSeq = new AtomicLong();
 
     public OfxBrokerClient(String url, String user, String password, String brokerId) {
         this.url = url;
@@ -89,6 +99,42 @@ public final class OfxBrokerClient {
             }
         }
         return "NO_RESPONSE";
+    }
+
+    /**
+     * Request an order-book snapshot for a symbol (FxcBroker/docs/stories/001). Returns the book
+     * levels as {@code MarketView.Level}s (both sides combined) for the {@code booker} histogram.
+     */
+    public List<MarketView.Level> requestBook(String symbol, int depth) throws Exception {
+        FxcBookRequest body = new FxcBookRequest();
+        body.setSecurityId(securityId(symbol));
+        body.setDepth(depth);
+        FxcBookRequestTransaction txn = new FxcBookRequestTransaction();
+        txn.setUID("BK-" + bookSeq.incrementAndGet());
+        txn.setWrappedMessage(body);
+        FxcBookRequestMessageSet set = new FxcBookRequestMessageSet();
+        set.setBookRequest(txn);
+
+        RequestEnvelope env = new RequestEnvelope();
+        env.setUID(txn.getUID());
+        TreeSet<RequestMessageSet> sets = new TreeSet<>();
+        sets.add(set);
+        withSignon(env, sets);
+
+        List<MarketView.Level> levels = new ArrayList<>();
+        ResponseEnvelope response = post(env);
+        for (ResponseMessageSet rs : response.getMessageSets()) {
+            if (rs instanceof FxcBookResponseMessageSet book && book.getBookResponse() != null
+                    && book.getBookResponse().getMessage() != null) {
+                for (FxcBookLevel level : book.getBookResponse().getMessage().getLevels()) {
+                    if (level.getPrice() != null && level.getSize() != null) {
+                        levels.add(new MarketView.Level(
+                                BigDecimal.valueOf(level.getPrice()), BigDecimal.valueOf(level.getSize())));
+                    }
+                }
+            }
+        }
+        return levels;
     }
 
     /** Fetch the account's current holdings from an OFX investment statement. */

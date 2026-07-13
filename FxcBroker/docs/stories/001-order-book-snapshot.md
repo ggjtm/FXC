@@ -1,6 +1,6 @@
 # Investor-requested order-book snapshot
 
-Status: proposed
+Status: implemented (standing FIX subscription + cache; OFX `FXCMDMSGSRQV1`/`RSV1` message set)
 Relates to: root DESIGN §4.1 (exchange market data) / §4.2 (broker); FxcInvestor I5 &
 [stories/002-booker](../../../FxcInvestor/docs/stories/002-booker-agent.md)
 

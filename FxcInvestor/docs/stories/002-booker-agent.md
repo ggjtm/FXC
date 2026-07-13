@@ -1,6 +1,7 @@
 # booker — order-book-weighted agent
 
-Status: implemented (sampler + σ filter; falls back to rando until a live book snapshot is supplied)
+Status: implemented (sampler + σ filter; live book depth supplied via the broker relay —
+FxcBroker/docs/stories/001)
 Relates to: PLAN item 5 (Strategy SPI + agents); [001](001-rando-agent.md)
 
 ## Summary

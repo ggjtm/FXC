@@ -9,6 +9,7 @@ import com.fxc.broker.ofx.OfxService;
 import com.fxc.broker.oms.BrokerDropCopyClient;
 import com.fxc.broker.oms.BrokerFixClient;
 import com.fxc.broker.oms.OmsService;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import quickfix.SessionSettings;
@@ -56,9 +57,18 @@ public final class BrokerServer implements AutoCloseable {
             OmsService omsService = new OmsService(accountService, repository);
             BrokerFixClient fixClient = new BrokerFixClient(fixInitiatorSettings, omsService);
             omsService.setRouter(fixClient);
+
+            // Market-data relay: cache exchange book snapshots for the OFX book handler
+            // (FxcBroker/docs/stories/001).
+            com.fxc.broker.md.MarketDataCache marketData = new com.fxc.broker.md.MarketDataCache();
+            fixClient.setMarketDataCache(marketData);
+
             fixClient.start();
-            // Best-effort: wait for the exchange session so routing works immediately.
-            fixClient.awaitLogon(15, TimeUnit.SECONDS);
+            // Best-effort: wait for the exchange session so routing/market-data work immediately.
+            if (fixClient.awaitLogon(15, TimeUnit.SECONDS)) {
+                fixClient.subscribeMarketData(
+                        List.copyOf(com.fxc.common.instrument.InstrumentCatalog.bySymbol().keySet()));
+            }
 
             BrokerDropCopyClient dropCopyClient = null;
             if (dropCopySettings != null) {
@@ -68,7 +78,7 @@ public final class BrokerServer implements AutoCloseable {
                 fixClient.setDropCopyPublisher(dropCopyClient);
             }
 
-            OfxService ofxService = new OfxService(omsService, accountService, ofxUser, ofxPassword, brokerId);
+            OfxService ofxService = new OfxService(omsService, accountService, marketData, ofxUser, ofxPassword, brokerId);
             OfxHttpServer ofxServer = new OfxHttpServer(ofxHost, ofxPort, "/ofx", ofxService);
             ofxServer.start();
 

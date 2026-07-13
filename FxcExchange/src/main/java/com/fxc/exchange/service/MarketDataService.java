@@ -26,13 +26,35 @@ public final class MarketDataService implements ExchangeListener {
         this.publisher = publisher;
     }
 
-    /** Register a subscription for each symbol and send an immediate snapshot. */
+    /** Depth (levels per side) published in a full snapshot. */
+    private static final int SNAPSHOT_DEPTH = 10;
+
+    /** Register a subscription for each symbol and send an immediate depth snapshot. */
     public void subscribe(Object target, String mdReqId, List<String> symbols) {
         for (String symbol : symbols) {
             bySymbol.computeIfAbsent(symbol, s -> new CopyOnWriteArrayList<>())
                     .add(new Subscription(target, mdReqId));
-            publisher.publishSnapshot(target, mdReqId, symbol, bestBid(symbol), bestAsk(symbol));
+            publisher.publishSnapshot(target, mdReqId, symbol, bids(symbol), asks(symbol));
         }
+    }
+
+    /** Send a fresh depth snapshot to every subscriber of a symbol (e.g. after book changes). */
+    public void publishSnapshot(String symbol) {
+        List<Subscription> subs = bySymbol.get(symbol);
+        if (subs == null) {
+            return;
+        }
+        for (Subscription sub : subs) {
+            publisher.publishSnapshot(sub.target(), sub.mdReqId(), symbol, bids(symbol), asks(symbol));
+        }
+    }
+
+    private List<OrderBook.Level> bids(String symbol) {
+        return engine.book(symbol).map(b -> b.bidLevels(SNAPSHOT_DEPTH)).orElseGet(List::of);
+    }
+
+    private List<OrderBook.Level> asks(String symbol) {
+        return engine.book(symbol).map(b -> b.askLevels(SNAPSHOT_DEPTH)).orElseGet(List::of);
     }
 
     @Override
@@ -46,6 +68,9 @@ public final class MarketDataService implements ExchangeListener {
         for (Subscription sub : subs) {
             publisher.publishIncremental(sub.target(), sub.mdReqId(), event.symbol(), bid, ask, event.trades());
         }
+        // Also refresh the full depth snapshot so subscribers (e.g. the broker's book cache) stay
+        // current as the book changes.
+        publishSnapshot(event.symbol());
     }
 
     private OrderBook.Level bestBid(String symbol) {

@@ -91,8 +91,17 @@ public final class Main {
             return;
         }
 
+        boolean refreshBook = config.getBoolean("agent.refreshBook", "booker".equals(strategyName));
         int done = 0;
         while (ticks == 0 || done < ticks) {
+            if (refreshBook) {
+                // Feed booker's order-book histogram from the broker's snapshot relay (best-effort).
+                try {
+                    market.setBook(symbol, broker.requestBook(symbol, 10));
+                } catch (Exception e) {
+                    // book relay unavailable; booker falls back to rando behavior
+                }
+            }
             Optional<SubmittedOrder> submitted = agent.step(symbol, PortfolioView.empty());
             submitted.ifPresent(o -> System.out.println("  " + o.intent().side() + " "
                     + o.intent().quantity() + " " + symbol + " @ " + o.snappedPrice()
