@@ -10,8 +10,10 @@ GridGain node — so no Ignite `--add-opens` flags either.
 
 ## Plan (root Phase 4)
 
-1. [~] **MariaDB persistence** (plain JDBC + `schema.sql`): agent config, decision log,
-   order/position mirror. Best-effort decision log first; full mirror later.
+1. [x] **MariaDB persistence** (plain JDBC + HikariCP): `InvestorStore` applies `db/schema.sql` and
+   persists the **decision log** (`DECISION_LOG`) — every tick's decision (submitted orders and
+   skips). Wired best-effort into the runner (runs without the DB if unreachable). `AGENT_CONFIG`/
+   `ORDER_MIRROR`/`POSITION_MIRROR` remain a later increment.
 2. [x] **OFX client** (OFX4J): signon to FxcBroker, statement sync, order submission via the custom
    `FXCORDMSGSRQV1` message set (now shared in `fxc-common` so broker + investor round-trip it).
 3. [x] **XMPP client** (Smack): `FeedClient` — feed ingestion folds fill statuses into `MarketView`

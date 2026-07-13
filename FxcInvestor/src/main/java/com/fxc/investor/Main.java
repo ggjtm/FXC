@@ -7,6 +7,8 @@ import com.fxc.investor.feed.FeedClient;
 import com.fxc.investor.ofx.OfxBrokerClient;
 import com.fxc.investor.strategy.MarketView;
 import com.fxc.investor.strategy.PortfolioView;
+import com.fxc.investor.store.DecisionRecord;
+import com.fxc.investor.store.InvestorStore;
 import com.fxc.investor.strategy.Strategies;
 import com.fxc.investor.strategy.Strategy;
 import java.math.BigDecimal;
@@ -84,8 +86,18 @@ public final class Main {
 
         InvestorAgent agent = new InvestorAgent(account, broker, strategy, market, new Random(seed), "INV");
 
+        // MariaDB decision-log persistence (best-effort — runs without it if the DB is unavailable).
+        InvestorStore store = openStore(config);
+        final InvestorStore storeRef = store;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (storeRef != null) {
+                storeRef.close();
+            }
+        }));
+
         System.out.println("FxcInvestor starting (strategy=" + strategyName + ", symbol=" + symbol
-                + ", account=" + account + ", agent " + (enabled ? "on" : "off") + ")...");
+                + ", account=" + account + ", agent " + (enabled ? "on" : "off")
+                + ", persistence " + (store != null ? "on" : "off") + ")...");
         if (!enabled) {
             System.out.println("agent off — nothing to do. Set agent.enabled=true.");
             return;
@@ -106,10 +118,44 @@ public final class Main {
             submitted.ifPresent(o -> System.out.println("  " + o.intent().side() + " "
                     + o.intent().quantity() + " " + symbol + " @ " + o.snappedPrice()
                     + " -> " + o.status() + " (" + o.clOrdId() + ")"));
+            logDecision(store, account, symbol, strategyName, submitted);
             done++;
             Thread.sleep(intervalMs);
         }
         System.out.println("FxcInvestor finished " + done + " ticks.");
+    }
+
+    private static InvestorStore openStore(FxcConfig config) {
+        if (!config.getBoolean("db.enabled", true)) {
+            return null;
+        }
+        String dbUrl = config.getString("db.url", "jdbc:mariadb://localhost:3306/fxc_investor");
+        String dbUser = config.getString("db.user", "fxc");
+        String dbPassword = config.getString("db.password", "fxc");
+        try {
+            return InvestorStore.open(dbUrl, dbUser, dbPassword);
+        } catch (Exception e) {
+            System.out.println("Decision-log persistence unavailable (" + e.getMessage() + "); continuing without it.");
+            return null;
+        }
+    }
+
+    private static void logDecision(InvestorStore store, String account, String symbol, String strategy,
+                                    Optional<SubmittedOrder> submitted) {
+        if (store == null) {
+            return;
+        }
+        try {
+            DecisionRecord record = submitted
+                    .map(o -> new DecisionRecord(System.currentTimeMillis(), account, symbol, strategy,
+                            o.intent().side().name(), o.intent().quantity(), o.snappedPrice(),
+                            o.clOrdId(), o.status()))
+                    .orElseGet(() -> new DecisionRecord(System.currentTimeMillis(), account, symbol, strategy,
+                            null, null, null, null, DecisionRecord.SKIPPED));
+            store.logDecision(record);
+        } catch (Exception e) {
+            System.out.println("Failed to log decision: " + e.getMessage());
+        }
     }
 
     private static FxcConfig loadConfig() {
