@@ -4,6 +4,7 @@ import com.fxc.common.instrument.Instrument;
 import com.fxc.common.store.ColdStore;
 import com.fxc.exchange.archive.ArchiveService;
 import com.fxc.exchange.book.MatchingEngine;
+import com.fxc.exchange.feed.FeedService;
 import com.fxc.exchange.grid.ExchangeRepository;
 import com.fxc.exchange.grid.ExchangeTables;
 import com.fxc.exchange.grid.GridNode;
@@ -36,11 +37,12 @@ public final class ExchangeServer implements AutoCloseable {
     private final ArchiveService archiveService;         // nullable
     private final ScheduledExecutorService archiveScheduler; // nullable
     private final ColdStore coldStore;                   // nullable
+    private final FeedService feedService;               // nullable
 
     private ExchangeServer(GridNode node, MatchingEngineService matchingService,
                            ClearingService clearingService, Acceptor acceptor,
                            ArchiveService archiveService, ScheduledExecutorService archiveScheduler,
-                           ColdStore coldStore) {
+                           ColdStore coldStore, FeedService feedService) {
         this.node = node;
         this.matchingService = matchingService;
         this.clearingService = clearingService;
@@ -48,6 +50,7 @@ public final class ExchangeServer implements AutoCloseable {
         this.archiveService = archiveService;
         this.archiveScheduler = archiveScheduler;
         this.coldStore = coldStore;
+        this.feedService = feedService;
     }
 
     /** Start without cold-data archival. */
@@ -65,6 +68,22 @@ public final class ExchangeServer implements AutoCloseable {
     public static ExchangeServer start(SessionSettings settings, String instanceName, int discoveryPort,
                                        String workDirectory, List<Instrument> instruments,
                                        ColdStore coldStore, long archiveIntervalMs) throws Exception {
+        return start(settings, instanceName, discoveryPort, workDirectory, instruments,
+                coldStore, archiveIntervalMs, -1, -1);
+    }
+
+    /**
+     * Start, optionally with cold-data archival and the price-data feed service
+     * (FxcExchange/docs/stories/001).
+     *
+     * @param feedHttpPort REST + web-UI port, or {@code < 0} to disable the feed service
+     * @param feedWsPort   live-feed WebSocket port ({@code 0} binds ephemeral); ignored if the feed
+     *                     is disabled
+     */
+    public static ExchangeServer start(SessionSettings settings, String instanceName, int discoveryPort,
+                                       String workDirectory, List<Instrument> instruments,
+                                       ColdStore coldStore, long archiveIntervalMs,
+                                       int feedHttpPort, int feedWsPort) throws Exception {
         GridNode node = GridNode.start(instanceName, discoveryPort, workDirectory);
         try {
             ExchangeTables.createAll(node.ignite());
@@ -107,12 +126,24 @@ public final class ExchangeServer implements AutoCloseable {
                 }
             }
 
+            FeedService feedService = null;
+            if (feedHttpPort >= 0) {
+                feedService = FeedService.start(node.ignite(), coldStore, System::currentTimeMillis,
+                        "0.0.0.0", feedHttpPort, Math.max(feedWsPort, 0));
+                matchingService.addListener(feedService.liveFeed());
+            }
+
             return new ExchangeServer(node, matchingService, clearingService, acceptor,
-                    archiveService, archiveScheduler, coldStore);
+                    archiveService, archiveScheduler, coldStore, feedService);
         } catch (Exception e) {
             node.close();
             throw e;
         }
+    }
+
+    /** The price-data feed service, or {@code null} if the feed is disabled. */
+    public FeedService feedService() {
+        return feedService;
     }
 
     public MatchingEngineService matchingService() {
@@ -130,6 +161,9 @@ public final class ExchangeServer implements AutoCloseable {
 
     @Override
     public void close() {
+        if (feedService != null) {
+            feedService.close();
+        }
         if (archiveScheduler != null) {
             archiveScheduler.shutdownNow();
         }

@@ -53,9 +53,14 @@ public final class ExchangeRepository {
                 order.sequence());
     }
 
-    public void insertTrade(Trade trade) {
-        run("INSERT INTO TRADE (trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, sequence) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    /**
+     * Persist a trade with its execution timestamp ({@code ts}, epoch millis) — the time axis the
+     * feed/candle service (FxcExchange/docs/stories/001) aggregates on. Trades are stamped at
+     * persist time; the pure {@link com.fxc.exchange.book.MatchingEngine} carries no clock.
+     */
+    public void insertTrade(Trade trade, long ts) {
+        run("INSERT INTO TRADE (trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, ts, sequence) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 trade.tradeId(),
                 trade.symbol(),
                 trade.price(),
@@ -65,6 +70,7 @@ public final class ExchangeRepository {
                 trade.buyBroker(),
                 trade.sellBroker(),
                 trade.aggressorSide().name(),
+                ts,
                 trade.sequence());
     }
 

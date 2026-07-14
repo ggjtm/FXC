@@ -11,6 +11,7 @@ import com.fxc.exchange.grid.ExchangeRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.LongSupplier;
 
 /**
  * The exchange's order-handling service: wraps the pure {@link MatchingEngine}, persists resulting
@@ -27,11 +28,18 @@ public final class MatchingEngineService {
 
     private final MatchingEngine engine;
     private final ExchangeRepository repository;
+    private final LongSupplier clock;
     private final List<ExchangeListener> listeners = new CopyOnWriteArrayList<>();
 
     public MatchingEngineService(MatchingEngine engine, ExchangeRepository repository) {
+        this(engine, repository, System::currentTimeMillis);
+    }
+
+    /** Test/DI constructor with an injectable trade-timestamp clock (epoch millis). */
+    public MatchingEngineService(MatchingEngine engine, ExchangeRepository repository, LongSupplier clock) {
         this.engine = engine;
         this.repository = repository;
+        this.clock = clock;
     }
 
     /** List instruments in both the engine and the INSTRUMENT table. */
@@ -52,13 +60,14 @@ public final class MatchingEngineService {
 
         repository.upsertOrder(result.order());
         if (result.accepted()) {
+            long ts = clock.getAsLong();
             for (Trade trade : result.trades()) {
-                repository.insertTrade(trade);
+                repository.insertTrade(trade, ts);
                 // The resting counterparty's status/cumQty changed too — persist it.
                 Side restingSide = result.order().side().opposite();
                 engine.order(trade.orderIdFor(restingSide)).ifPresent(repository::upsertOrder);
             }
-            notifyListeners(new ExchangeEvent(request.symbol(), result.trades()));
+            notifyListeners(new ExchangeEvent(request.symbol(), result.trades(), ts));
         }
         return result;
     }
@@ -68,7 +77,7 @@ public final class MatchingEngineService {
         Optional<Order> cancelled = engine.cancel(orderId);
         cancelled.ifPresent(order -> {
             repository.upsertOrder(order);
-            notifyListeners(new ExchangeEvent(order.symbol(), List.of()));
+            notifyListeners(new ExchangeEvent(order.symbol(), List.of(), clock.getAsLong()));
         });
         return cancelled;
     }

@@ -77,14 +77,14 @@ public final class ArchiveService {
 
     private int archiveTrades(long now) {
         List<List<?>> rows = query(
-                "SELECT trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, sequence "
+                "SELECT trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, ts, sequence "
                         + "FROM TRADE");
         if (rows.isEmpty()) {
             return 0;
         }
         String insert = "INSERT INTO TRADE_ARCHIVE "
-                + "(trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, sequence, archived_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE archived_at = VALUES(archived_at)";
+                + "(trade_id, symbol, price, quantity, buy_order_id, sell_order_id, buy_broker, sell_broker, aggressor, ts, sequence, archived_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE archived_at = VALUES(archived_at)";
         insertBatch(insert, rows, (ps, r) -> {
             ps.setString(1, str(r, 0));
             ps.setString(2, str(r, 1));
@@ -96,7 +96,8 @@ public final class ArchiveService {
             ps.setString(8, str(r, 7));
             ps.setString(9, str(r, 8));
             ps.setLong(10, lng(r, 9));
-            ps.setLong(11, now);
+            ps.setLong(11, lng(r, 10));
+            ps.setLong(12, now);
         });
         deleteById("TRADE", "trade_id", rows);
         return rows.size();

@@ -64,6 +64,7 @@ public final class ExchangeTables {
                     buy_broker     VARCHAR NOT NULL,
                     sell_broker    VARCHAR NOT NULL,
                     aggressor      VARCHAR NOT NULL,
+                    ts             BIGINT NOT NULL,
                     sequence       BIGINT NOT NULL
                 ) WITH "template=partitioned,backups=0"
                 """);

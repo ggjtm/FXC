@@ -1,0 +1,580 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FxcExchange — Price Charts</title>
+<style>
+  /* ---- Neutral dark-friendly theme, all inline ---- */
+  :root {
+    --bg: #16181d;
+    --panel: #1e2128;
+    --panel2: #262a33;
+    --border: #333844;
+    --text: #d6dae2;
+    --muted: #8b93a1;
+    --accent: #3584e4;
+    --green: #26a269;
+    --red: #e01b24;
+    --line: #4a90e2;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 13px;
+  }
+  body { display: flex; flex-direction: column; }
+  /* Toolbar */
+  #toolbar {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px;
+    padding: 10px 14px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .field { display: flex; flex-direction: column; gap: 3px; }
+  .field label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  select, input, button {
+    background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px 8px; font-size: 13px; font-family: inherit;
+  }
+  input[type="datetime-local"] { color-scheme: dark; }
+  button {
+    cursor: pointer; background: var(--accent); border-color: var(--accent);
+    color: #fff; font-weight: 600; padding: 6px 16px;
+  }
+  button:hover { filter: brightness(1.1); }
+  .hint { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  /* Chart-style segmented toggle */
+  #styleToggle { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+  #styleToggle button {
+    background: var(--panel2); color: var(--muted);
+    border: none; border-radius: 0; font-weight: 500; padding: 5px 12px;
+  }
+  #styleToggle button.active { background: var(--accent); color: #fff; }
+  /* Status area */
+  #status { display: flex; align-items: center; gap: 14px; margin-left: auto; }
+  #live { display: none; align-items: center; gap: 5px; color: var(--green); font-weight: 600; }
+  #live .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--green); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  #applied { color: var(--muted); font-size: 12px; }
+  /* Error banner */
+  #banner {
+    display: none; padding: 8px 14px; background: #3a1416;
+    color: #ffb3b6; border-bottom: 1px solid #5a1e22; font-size: 12px;
+  }
+  /* Chart area */
+  #chartWrap { position: relative; flex: 1 1 auto; min-height: 0; }
+  #chart { display: block; width: 100%; height: 100%; }
+  #empty {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    color: var(--muted); font-size: 15px; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div id="toolbar">
+    <div class="field">
+      <label for="symbol">Security</label>
+      <select id="symbol"></select>
+    </div>
+    <div class="field">
+      <label for="start">Start</label>
+      <input type="datetime-local" id="start">
+    </div>
+    <div class="field">
+      <label for="end">End</label>
+      <input type="datetime-local" id="end">
+      <span class="hint">empty = live</span>
+    </div>
+    <div class="field">
+      <label>Style</label>
+      <div id="styleToggle">
+        <button data-style="candles" class="active">Candles</button>
+        <button data-style="lines">Lines</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="granularity">Granularity</label>
+      <select id="granularity">
+        <option value="1m">1m</option>
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="30m">30m</option>
+        <option value="1h">1h</option>
+        <option value="4h">4h</option>
+        <option value="1d">1d</option>
+        <option value="1w">1w</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <button id="load">Load</button>
+    </div>
+    <div id="status">
+      <span id="live"><span class="dot"></span>LIVE</span>
+      <span id="applied"></span>
+    </div>
+  </div>
+
+  <div id="banner"></div>
+
+  <div id="chartWrap">
+    <canvas id="chart"></canvas>
+    <div id="empty">No trades in range.</div>
+  </div>
+
+<script>
+"use strict";
+(function () {
+  // ---------------------------------------------------------------------------
+  // Constants & state
+  // ---------------------------------------------------------------------------
+  // Map granularity token <-> milliseconds. Used for the request, for the live
+  // bucketing math, and for mapping the server's applied granularityMs back to a
+  // token to display.
+  var GRAN = [
+    { tok: "1m",  ms: 60000 },
+    { tok: "5m",  ms: 5 * 60000 },
+    { tok: "15m", ms: 15 * 60000 },
+    { tok: "30m", ms: 30 * 60000 },
+    { tok: "1h",  ms: 3600000 },
+    { tok: "4h",  ms: 4 * 3600000 },
+    { tok: "1d",  ms: 86400000 },
+    { tok: "1w",  ms: 7 * 86400000 }
+  ];
+  function tokToMs(tok) {
+    for (var i = 0; i < GRAN.length; i++) if (GRAN[i].tok === tok) return GRAN[i].ms;
+    return 60000;
+  }
+  function msToTok(ms) {
+    // choose the closest known token for display
+    var best = GRAN[0], bd = Infinity;
+    for (var i = 0; i < GRAN.length; i++) {
+      var d = Math.abs(GRAN[i].ms - ms);
+      if (d < bd) { bd = d; best = GRAN[i]; }
+    }
+    return best.tok;
+  }
+
+  var state = {
+    wsPort: null,
+    symbol: null,
+    style: "candles",
+    granularityMs: 60000,   // applied granularity (used for live bucketing)
+    candles: [],            // [{t,o,h,l,c,v}]
+    volByPrice: {},         // price -> volume (map for fast merge)
+    ws: null
+  };
+
+  // DOM refs
+  var $ = function (id) { return document.getElementById(id); };
+  var elSymbol = $("symbol"), elStart = $("start"), elEnd = $("end"),
+      elGran = $("granularity"), elLoad = $("load"), elBanner = $("banner"),
+      elLive = $("live"), elApplied = $("applied"), elEmpty = $("empty"),
+      canvas = $("chart"), ctx = canvas.getContext("2d");
+
+  // ---------------------------------------------------------------------------
+  // Utilities
+  // ---------------------------------------------------------------------------
+  function showError(msg) {
+    elBanner.textContent = msg;
+    elBanner.style.display = "block";
+  }
+  function clearError() { elBanner.style.display = "none"; }
+
+  // datetime-local <-> epoch millis (values are local time, no timezone)
+  function dtToMillis(val) {
+    if (!val) return null;
+    var t = new Date(val).getTime();
+    return isNaN(t) ? null : t;
+  }
+  function millisToDt(ms) {
+    // format as yyyy-MM-ddTHH:mm in LOCAL time for a datetime-local input
+    var d = new Date(ms);
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) +
+           "T" + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Networking
+  // ---------------------------------------------------------------------------
+  function fetchSymbols() {
+    return fetch("/api/symbols").then(function (r) {
+      if (!r.ok) throw new Error("symbols HTTP " + r.status);
+      return r.json();
+    }).then(function (arr) {
+      elSymbol.innerHTML = "";
+      (arr || []).forEach(function (s) {
+        var o = document.createElement("option");
+        o.value = s; o.textContent = s;
+        elSymbol.appendChild(o);
+      });
+      if (arr && arr.length) elSymbol.value = arr[0];
+    });
+  }
+
+  function fetchConfig() {
+    return fetch("/api/config").then(function (r) {
+      if (!r.ok) throw new Error("config HTTP " + r.status);
+      return r.json();
+    }).then(function (cfg) {
+      state.wsPort = cfg && cfg.wsPort;
+    });
+  }
+
+  // Fetch candle + volume-by-price data and render.
+  function loadCandles() {
+    clearError();
+    closeLiveSocket();
+
+    var symbol = elSymbol.value;
+    var granTok = elGran.value;
+    var startMs = dtToMillis(elStart.value);
+    var endVal = elEnd.value;                 // empty => live
+    var live = !endVal;
+    var endMs = live ? Date.now() : dtToMillis(endVal);
+    if (startMs == null) startMs = new Date().setHours(0, 0, 0, 0);
+    if (endMs == null) endMs = Date.now();
+
+    state.symbol = symbol;
+
+    var url = "/api/candles?symbol=" + encodeURIComponent(symbol) +
+              "&start=" + startMs + "&end=" + endMs +
+              "&granularity=" + encodeURIComponent(granTok);
+
+    fetch(url).then(function (r) {
+      if (!r.ok) throw new Error("candles HTTP " + r.status);
+      return r.json();
+    }).then(function (data) {
+      state.candles = (data.candles || []).slice();
+      state.granularityMs = data.granularityMs || tokToMs(granTok);
+      // Build the volume-by-price map
+      state.volByPrice = {};
+      (data.volumeByPrice || []).forEach(function (b) {
+        state.volByPrice[b.price] = (state.volByPrice[b.price] || 0) + b.volume;
+      });
+      updateApplied();
+      resizeAndDraw();
+      if (live) openLiveSocket(symbol);
+    }).catch(function (e) {
+      showError("Failed to load candles: " + e.message);
+      state.candles = [];
+      state.volByPrice = {};
+      resizeAndDraw();
+    });
+  }
+
+  function updateApplied() {
+    elApplied.textContent = "applied granularity: " + msToTok(state.granularityMs) +
+                            " (" + state.granularityMs + " ms)";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Live WebSocket
+  // ---------------------------------------------------------------------------
+  function openLiveSocket(symbol) {
+    if (!state.wsPort) return;
+    try {
+      var url = "ws://" + location.hostname + ":" + state.wsPort +
+                "/ws?symbol=" + encodeURIComponent(symbol);
+      var ws = new WebSocket(url);
+      state.ws = ws;
+      ws.onopen = function () { elLive.style.display = "inline-flex"; };
+      ws.onclose = function () { if (state.ws === ws) { state.ws = null; elLive.style.display = "none"; } };
+      ws.onerror = function () { /* onclose will follow */ };
+      ws.onmessage = function (ev) {
+        var msg;
+        try { msg = JSON.parse(ev.data); } catch (e) { return; }
+        if (!msg || msg.type !== "tick") return;
+        if (msg.symbol && msg.symbol !== state.symbol) return;
+        foldTick(msg);
+        drawAll();
+      };
+    } catch (e) {
+      showError("Live socket error: " + e.message);
+    }
+  }
+
+  function closeLiveSocket() {
+    if (state.ws) {
+      var ws = state.ws; state.ws = null;
+      try { ws.close(); } catch (e) {}
+    }
+    elLive.style.display = "none";
+  }
+
+  // Fold a live tick into the candle array + histogram (no refetch).
+  function foldTick(msg) {
+    var g = state.granularityMs || 60000;
+    var bucket = Math.floor(msg.windowStart / g) * g;
+    var last = msg.last, vol = msg.volume || 0;
+    var arr = state.candles;
+    var tail = arr.length ? arr[arr.length - 1] : null;
+
+    if (tail && tail.t === bucket) {
+      tail.c = last;
+      tail.h = Math.max(tail.h, last);
+      tail.l = Math.min(tail.l, last);
+      tail.v += vol;
+    } else if (!tail || bucket > tail.t) {
+      arr.push({ t: bucket, o: last, h: last, l: last, c: last, v: vol });
+    }
+    // Merge byPrice histogram
+    (msg.byPrice || []).forEach(function (b) {
+      state.volByPrice[b.price] = (state.volByPrice[b.price] || 0) + b.volume;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Canvas sizing (devicePixelRatio-aware)
+  // ---------------------------------------------------------------------------
+  var view = { w: 0, h: 0 };
+  function resizeCanvas() {
+    var wrap = canvas.parentNode;
+    var dpr = window.devicePixelRatio || 1;
+    var cssW = wrap.clientWidth, cssH = wrap.clientHeight;
+    canvas.width = Math.max(1, Math.round(cssW * dpr));
+    canvas.height = Math.max(1, Math.round(cssH * dpr));
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);  // draw in CSS pixels
+    view.w = cssW; view.h = cssH;
+  }
+  function resizeAndDraw() { resizeCanvas(); drawAll(); }
+
+  // ---------------------------------------------------------------------------
+  // Rendering
+  // ---------------------------------------------------------------------------
+  var GUTTER = 55;          // left price-axis gutter
+  var PAD_TOP = 34;         // room for title
+  var PAD_RIGHT = 12;
+  var TIME_AXIS_H = 22;
+  var HIST_FRAC = 0.32;     // volume-by-price bars max width fraction of plot
+
+  function drawAll() {
+    ctx.clearRect(0, 0, view.w, view.h);
+    var candles = state.candles;
+
+    // Title
+    ctx.fillStyle = "#d6dae2";
+    ctx.font = "600 14px system-ui, sans-serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign = "left";
+    var title = (state.symbol || "—") + " — " + msToTok(state.granularityMs);
+    ctx.fillText(title, GUTTER, 22);
+
+    elEmpty.style.display = candles.length ? "none" : "flex";
+    if (!candles.length) return;
+
+    // Layout regions
+    var plotLeft = GUTTER;
+    var plotRight = view.w - PAD_RIGHT;
+    var plotW = Math.max(1, plotRight - plotLeft);
+    var regionTop = PAD_TOP;
+    var regionBottom = view.h - TIME_AXIS_H;
+    var totalH = Math.max(1, regionBottom - regionTop);
+    var priceH = totalH * 0.72;
+    var volGap = 8;
+    var volStripTop = regionTop + priceH + volGap;
+    var volStripH = regionBottom - volStripTop;
+    var priceTop = regionTop;
+    var priceBottom = regionTop + priceH;
+
+    // Price scale over visible candles
+    var minLow = Infinity, maxHigh = -Infinity, maxVol = 0;
+    for (var i = 0; i < candles.length; i++) {
+      var c = candles[i];
+      if (c.l < minLow) minLow = c.l;
+      if (c.h > maxHigh) maxHigh = c.h;
+      if (c.v > maxVol) maxVol = c.v;
+    }
+    if (!isFinite(minLow) || !isFinite(maxHigh)) { minLow = 0; maxHigh = 1; }
+    if (minLow === maxHigh) { minLow -= 1; maxHigh += 1; } // guard min==max
+    // small vertical padding
+    var pricePad = (maxHigh - minLow) * 0.05;
+    minLow -= pricePad; maxHigh += pricePad;
+
+    var priceToY = function (p) {
+      return priceBottom - (p - minLow) / (maxHigh - minLow) * (priceBottom - priceTop);
+    };
+    // X slot per candle
+    var n = candles.length;
+    var slot = plotW / n;
+    var xOf = function (idx) { return plotLeft + slot * (idx + 0.5); };
+
+    drawPriceGrid(plotLeft, plotRight, priceTop, priceBottom, minLow, maxHigh, priceToY);
+    drawPriceHistogram(plotRight, plotW, priceToY, minLow, maxHigh);
+    if (state.style === "lines") drawLines(candles, xOf, priceToY);
+    else drawCandles(candles, xOf, slot, priceToY);
+    drawVolumeStrip(candles, xOf, slot, volStripTop, volStripH, maxVol);
+    drawTimeAxis(candles, xOf, regionBottom);
+  }
+
+  // Price gridlines + left-gutter labels.
+  function drawPriceGrid(left, right, top, bottom, minP, maxP, priceToY) {
+    var lines = 5;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.font = "11px system-ui, sans-serif";
+    for (var i = 0; i <= lines; i++) {
+      var p = minP + (maxP - minP) * (i / lines);
+      var y = priceToY(p);
+      ctx.strokeStyle = "#2a2f3a";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(left, Math.round(y) + 0.5);
+      ctx.lineTo(right, Math.round(y) + 0.5);
+      ctx.stroke();
+      ctx.fillStyle = "#8b93a1";
+      ctx.fillText(fmtPrice(p), left - 6, y);
+    }
+  }
+
+  function fmtPrice(p) {
+    var abs = Math.abs(p);
+    var dec = abs >= 1000 ? 0 : abs >= 100 ? 1 : abs >= 1 ? 2 : 4;
+    return p.toFixed(dec);
+  }
+
+  // Volume-by-price: horizontal bars anchored at the right edge, extending left.
+  // Drawn first so candles sit on top. 30% opacity slate-blue.
+  function drawPriceHistogram(plotRight, plotW, priceToY, minP, maxP) {
+    var prices = Object.keys(state.volByPrice);
+    if (!prices.length) return;
+    var maxV = 0, levels = prices.length;
+    for (var i = 0; i < prices.length; i++) {
+      var v = state.volByPrice[prices[i]];
+      if (v > maxV) maxV = v;
+    }
+    if (maxV <= 0) return;
+    var maxBarW = plotW * HIST_FRAC;
+    var thick = Math.max(2, (priceToY(minP) - priceToY(maxP)) / Math.max(1, levels));
+    ctx.fillStyle = "rgba(90, 128, 170, 0.30)";
+    for (var j = 0; j < prices.length; j++) {
+      var price = parseFloat(prices[j]);
+      var vol = state.volByPrice[prices[j]];
+      var y = priceToY(price);
+      var barW = vol / maxV * maxBarW;
+      ctx.fillRect(plotRight - barW, y - thick / 2, barW, thick);
+    }
+  }
+
+  function drawCandles(candles, xOf, slot, priceToY) {
+    var bodyW = Math.max(1, slot * 0.7);
+    for (var i = 0; i < candles.length; i++) {
+      var c = candles[i];
+      var x = xOf(i);
+      var up = c.c >= c.o;
+      var color = up ? "#26a269" : "#e01b24";
+      // wick
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(x) + 0.5, priceToY(c.h));
+      ctx.lineTo(Math.round(x) + 0.5, priceToY(c.l));
+      ctx.stroke();
+      // body
+      var yOpen = priceToY(c.o), yClose = priceToY(c.c);
+      var top = Math.min(yOpen, yClose);
+      var h = Math.max(1, Math.abs(yClose - yOpen));
+      ctx.fillStyle = color;
+      ctx.fillRect(x - bodyW / 2, top, bodyW, h);
+    }
+  }
+
+  function drawLines(candles, xOf, priceToY) {
+    ctx.strokeStyle = "#4a90e2";
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    for (var i = 0; i < candles.length; i++) {
+      var x = xOf(i), y = priceToY(candles[i].c);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // Bottom volume strip: one bar per candle, colored by up/down.
+  function drawVolumeStrip(candles, xOf, slot, top, h, maxVol) {
+    if (h <= 0) return;
+    var base = top + h;
+    ctx.fillStyle = "#8b93a1";
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("Volume", GUTTER, top - 12);
+    if (maxVol <= 0) return;
+    var barW = Math.max(1, slot * 0.7);
+    for (var i = 0; i < candles.length; i++) {
+      var c = candles[i];
+      var bh = c.v / maxVol * h;
+      var x = xOf(i);
+      ctx.fillStyle = (c.c >= c.o) ? "#26a269" : "#e01b24";
+      ctx.fillRect(x - barW / 2, base - bh, barW, bh);
+    }
+  }
+
+  // Time axis: a few labels along the bottom.
+  function drawTimeAxis(candles, xOf, y) {
+    var intraday = state.granularityMs < 86400000;
+    ctx.fillStyle = "#8b93a1";
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.textBaseline = "top";
+    var labels = Math.min(6, candles.length);
+    var step = Math.max(1, Math.floor(candles.length / labels));
+    for (var i = 0; i < candles.length; i += step) {
+      var d = new Date(candles[i].t);
+      var txt = intraday
+        ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : d.toLocaleDateString();
+      var x = xOf(i);
+      // keep labels inside the canvas
+      ctx.textAlign = (i === 0) ? "left" : "center";
+      ctx.fillText(txt, x, y + 4);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Wiring
+  // ---------------------------------------------------------------------------
+  // Chart-style toggle
+  Array.prototype.forEach.call(document.querySelectorAll("#styleToggle button"), function (btn) {
+    btn.addEventListener("click", function () {
+      state.style = btn.getAttribute("data-style");
+      document.querySelectorAll("#styleToggle button").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      drawAll();
+    });
+  });
+
+  elLoad.addEventListener("click", loadCandles);
+  elSymbol.addEventListener("change", loadCandles);  // switching symbol reloads (and reopens socket)
+  window.addEventListener("resize", resizeAndDraw);
+
+  // Defaults: start = today local midnight, end = empty (live)
+  function setDefaults() {
+    var midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+    elStart.value = millisToDt(midnight.getTime());
+    elEnd.value = "";
+  }
+
+  // ---------------------------------------------------------------------------
+  // Init
+  // ---------------------------------------------------------------------------
+  function init() {
+    setDefaults();
+    resizeCanvas();
+    Promise.all([
+      fetchSymbols().catch(function (e) { showError("Failed to load symbols: " + e.message); }),
+      fetchConfig().catch(function (e) { showError("Failed to load config: " + e.message); })
+    ]).then(function () {
+      loadCandles();  // auto-load default view
+    });
+  }
+  init();
+})();
+</script>
+</body>
+</html>

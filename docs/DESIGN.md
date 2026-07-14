@@ -128,10 +128,17 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
     delegating to each instrument's `SettlementProfile` (currency exchange for FX, DVP cash
     settlement for equities); writes settlement records.
   - `ArchiveService` — drains terminal orders/trades/settlements to MariaDB.
-- **GridGain tables**: `INSTRUMENT` (with asset-class discriminator), `ORDERS`, `TRADE`,
-  `SETTLEMENT_OBLIGATION`.
+- **GridGain tables**: `INSTRUMENT` (with asset-class discriminator), `ORDERS`, `TRADE` (carries a
+  `ts` execution-time column for the feed service), `SETTLEMENT_OBLIGATION`.
 - Instruments seeded from configuration (initial set: EUR/USD, GBP/USD, USD/JPY, AUD/USD spot
   pairs plus a handful of fictional equities, e.g. ACME, GLOBEX, INITECH).
+- **Feed service (`com.fxc.exchange.feed`, FxcExchange/docs/stories/001)** — market-surveillance
+  price data over three channels: (a) **FIX** raw quotes to brokers in three depth tiers
+  (top-of-book / 5-level / full) plus last sale, via `MarketDepth(264)` on the market-data request;
+  (b) a framework-free **REST** service (JDK `HttpServer`) serving time-bucketed OHLCV **candles** +
+  a volume-by-price histogram, with age-based minimum-granularity floors and hot+cold trade reads;
+  and (c) a live one-second **ticker WebSocket** (hand-rolled RFC 6455 — no web framework, matching
+  the OFX transport) feeding a self-contained **charting web UI**. No new runtime dependencies.
 
 ### 4.2 FxcBroker — OFX brokerage + OMS
 

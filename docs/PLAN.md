@@ -146,6 +146,18 @@ against FxcPub, without touching stock Tigase.
 - **Exit criteria**: a stock Mastodon client authenticates, posts a status, and sees the public
   timeline (including broker fill statuses) through the gateway.
 
+## Additional stories (post-roadmap)
+
+Feature stories layered on the completed components, tracked in each component's `docs/stories/`.
+
+- **FxcExchange — Exchange feeds (`docs/stories/001`) — DONE.** Market-surveillance price data:
+  FIX raw quotes in three depth tiers + last sale (`MarketDepth`), a framework-free REST candle
+  service (OHLCV + volume-by-price, age-based granularity floors, hot+cold trade reads), a
+  hand-rolled RFC 6455 live-ticker WebSocket, and a self-contained charting web UI at
+  `http://localhost:8090/`. New package `com.fxc.exchange.feed`; a `ts` column was added to `TRADE`
+  / `TRADE_ARCHIVE`. Verified by `CandleAggregatorTest`, `WebSocketFeedServerTest`,
+  `FeedHttpServerIntegrationTest`, `FeedUiServingTest`, `MarketDataDepthTest`.
+
 ## Suggested review checkpoints
 
 Stop-and-review after Phases 1, 2, and 4 — those lock in the FIX usage, the OFX extension

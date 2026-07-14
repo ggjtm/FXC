@@ -172,8 +172,14 @@ public final class ExchangeApplication extends MessageCracker implements Applica
             msg.getGroup(i, group);
             symbols.add(group.getString(Symbol.FIELD));
         }
+        // Honor MarketDepth(264): 1 = top of book, 5 = market depth, 0 = full book
+        // (FxcExchange/docs/stories/001 tiers 1–3). Absent → default depth.
         if (marketDataService != null) {
-            marketDataService.subscribe(sessionId, mdReqId, symbols);
+            if (msg.isSetField(quickfix.field.MarketDepth.FIELD)) {
+                marketDataService.subscribe(sessionId, mdReqId, symbols, msg.getInt(quickfix.field.MarketDepth.FIELD));
+            } else {
+                marketDataService.subscribe(sessionId, mdReqId, symbols);
+            }
         }
     }
 
@@ -181,7 +187,8 @@ public final class ExchangeApplication extends MessageCracker implements Applica
 
     @Override
     public void publishSnapshot(Object target, String mdReqId, String symbol,
-                                List<OrderBook.Level> bids, List<OrderBook.Level> asks) {
+                                List<OrderBook.Level> bids, List<OrderBook.Level> asks,
+                                OrderBook.Level lastSale) {
         quickfix.fix44.MarketDataSnapshotFullRefresh snap = new quickfix.fix44.MarketDataSnapshotFullRefresh();
         snap.set(new MDReqID(mdReqId));
         snap.set(new Symbol(symbol));
@@ -192,6 +199,10 @@ public final class ExchangeApplication extends MessageCracker implements Applica
         }
         for (OrderBook.Level ask : asks) {
             snap.addGroup(snapshotEntry(MDEntryType.OFFER, ask));
+            entries++;
+        }
+        if (lastSale != null) {
+            snap.addGroup(snapshotEntry(MDEntryType.TRADE, lastSale));
             entries++;
         }
         if (entries == 0) {

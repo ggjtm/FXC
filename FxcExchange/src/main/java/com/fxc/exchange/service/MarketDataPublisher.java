@@ -11,9 +11,15 @@ import java.util.List;
  */
 public interface MarketDataPublisher {
 
-    /** Publish a full snapshot carrying up to N bid and ask levels (depth), best first. */
+    /**
+     * Publish a full snapshot carrying up to N bid and ask levels (depth), best first, plus the last
+     * sale ({@code lastSale}, nullable) as an {@code MDEntryType=TRADE} entry — so a subscriber gets
+     * top-of-book/market-depth/full-depth quotes and the last traded price together
+     * (FxcExchange/docs/stories/001, tiers 1–3).
+     */
     void publishSnapshot(Object target, String mdReqId, String symbol,
-                         List<OrderBook.Level> bids, List<OrderBook.Level> asks);
+                         List<OrderBook.Level> bids, List<OrderBook.Level> asks,
+                         OrderBook.Level lastSale);
 
     void publishIncremental(Object target, String mdReqId, String symbol,
                             OrderBook.Level bid, OrderBook.Level ask, List<Trade> trades);

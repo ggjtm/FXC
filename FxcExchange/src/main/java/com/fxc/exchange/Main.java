@@ -37,11 +37,17 @@ public final class Main {
         ColdStore coldStore = openColdStore(config);
         long archiveIntervalMs = config.getInt("archive.intervalMs", 30_000);
 
+        // Price-data feed service (FxcExchange/docs/stories/001): REST + web UI + live WebSocket.
+        boolean feedEnabled = config.getBoolean("feed.enabled", true);
+        int feedHttpPort = feedEnabled ? config.getInt("feed.http.port", 8090) : -1;
+        int feedWsPort = config.getInt("feed.ws.port", 8091);
+
         System.out.println("FxcExchange starting (GridGain='" + instanceName + "', FIX acceptor from cfg"
-                + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off") + ")...");
+                + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off")
+                + ", feed " + (feedEnabled ? "http :" + feedHttpPort + " ws :" + feedWsPort : "off") + ")...");
         ExchangeServer server = ExchangeServer.start(
                 settings, instanceName, discoveryPort, workDir, InstrumentCatalog.defaults(),
-                coldStore, archiveIntervalMs);
+                coldStore, archiveIntervalMs, feedHttpPort, feedWsPort);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -50,7 +56,9 @@ public final class Main {
             shutdown.countDown();
         }));
         System.out.println("FxcExchange started. " + InstrumentCatalog.defaults().size()
-                + " instruments listed. Ctrl-C to stop.");
+                + " instruments listed."
+                + (feedEnabled ? " Price charts: http://localhost:" + server.feedService().httpPort() + "/" : "")
+                + " Ctrl-C to stop.");
         shutdown.await();
     }
 

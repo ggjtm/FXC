@@ -36,9 +36,14 @@ CREATE TABLE IF NOT EXISTS TRADE_ARCHIVE (
     buy_broker     VARCHAR(64)    NOT NULL,
     sell_broker    VARCHAR(64)    NOT NULL,
     aggressor      VARCHAR(8)     NOT NULL,
+    ts             BIGINT         NOT NULL,
     sequence       BIGINT         NOT NULL,
-    archived_at    BIGINT         NOT NULL
+    archived_at    BIGINT         NOT NULL,
+    INDEX idx_trade_archive_symbol_ts (symbol, ts)
 );
+
+-- Migration for dev DBs created before the feed/candle story added the trade time axis.
+ALTER TABLE TRADE_ARCHIVE ADD COLUMN IF NOT EXISTS ts BIGINT NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS SETTLEMENT_OBLIGATION_ARCHIVE (
     id             VARCHAR(96)    NOT NULL PRIMARY KEY,

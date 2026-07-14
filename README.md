@@ -73,6 +73,10 @@ then **Broker** (connects to Exchange + Pub, serves OFX), then **Investor**.
 Each reads `conf/<component>.conf` with localhost defaults; override any key with `-Dkey=value`
 (e.g. `./gradlew :FxcInvestor:run -Dmode=repl` for the interactive REPL).
 
+Once FxcExchange is running, its **price-charting web UI** is at **http://localhost:8090/** — pick a
+security, interval, candle/line style, and granularity; it live-updates over a WebSocket when the
+interval end is left open (FxcExchange/docs/stories/001). Its REST feed is under `/api/candles`.
+
 ## Demo (end-to-end)
 
 `scripts/demo.sh` is the full Phase-6 walkthrough. It brings up MariaDB + Tigase, starts all three
