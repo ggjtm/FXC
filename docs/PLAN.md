@@ -1,16 +1,18 @@
 # FXC Implementation Plan
 
-Status: **Phase 4 in progress** (FxcInvestor: Strategy SPI + all three agents — `rando`, `booker`,
-`bookfish`; OFX client; single-instance runner; live XMPP feed ingestion; the broker order-book
-relay feeding `booker`; the opt-in **Gatling multi-agent runner**; and **MariaDB decision-log
-persistence**. 47 tests green total. Remaining: the interactive CLI REPL). Phases 0–3 complete.
-Companion to [DESIGN.md](DESIGN.md).
+Status: **Phases 0–5 complete; Phase 6 (end-to-end demo & hardening) next.** FxcInvestor delivered
+the full Strategy SPI + all three agents (`rando`, `booker`, `bookfish`), the OFX client, the
+single-instance runner, live XMPP feed ingestion, the broker order-book relay feeding `booker`, the
+opt-in **Gatling multi-agent runner**, **MariaDB decision-log persistence**, and the interactive
+**CLI REPL**. Phase 5 added shared `ColdStore` archival across all three GridGain components with
+FxcPub deep-history fallback. ~50 tests across the modules (three archival integration tests are
+gated on the MariaDB container). Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
 first (everything depends on it), then Broker, then Pub, then Investor, then archival, then the
 end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase 7).
 
-## Phase 0 — Foundations
+## Phase 0 — Foundations — DONE
 
 - Add `fxc-common` module: the instrument model of DESIGN §3.0 (sealed `Instrument` hierarchy
   with `FxSpotInstrument` and `EquityInstrument`, `AssetClass`, `SettlementProfile`; derivatives
@@ -33,7 +35,7 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
 - **Exit criteria**: `./gradlew build` green with all dependencies resolving; `docker compose up`
   yields a reachable MariaDB; Tigase spike outcome recorded in PROBLEMS.md.
 
-## Phase 1 — FxcExchange
+## Phase 1 — FxcExchange — DONE
 
 1. Embedded GridGain node bootstrap + tables (`INSTRUMENT` with asset-class discriminator,
    `ORDERS`, `TRADE`, `SETTLEMENT_OBLIGATION`); FX pairs and equities seeded from config.
@@ -47,7 +49,7 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
 - **Exit criteria**: a scripted QuickFIX/J test client can submit crossing orders in both an
   FX pair and an equity, receiving fills and market data for each.
 
-## Phase 2 — FxcBroker
+## Phase 2 — FxcBroker — DONE
 
 1. GridGain node + tables (`ACCOUNT`, `POSITION`, `CLIENT_ORDER`, `EXECUTION`); dev accounts
    seeded from config.
@@ -60,7 +62,7 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
 - **Exit criteria**: integration test drives signon → order → fill → statement shows the
   position, against a live FxcExchange, for both an FX pair and an equity.
 
-## Phase 3 — FxcPub (XMPP-native)
+## Phase 3 — FxcPub (XMPP-native) — DONE
 
 Mastodon-compatibility is **not** in this phase — it is the deferred gateway addon (Phase 7).
 FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application layer.
@@ -78,15 +80,20 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
 - **Exit criteria**: a fill on FxcExchange appears as a status on the broker's feed, readable via
   an XMPP (Smack) subscription to the pubsub node.
 
-## Phase 4 — FxcInvestor
+## Phase 4 — FxcInvestor — DONE
 
-1. MariaDB persistence (JDBC + `schema.sql`): config, decision log, order/position mirror.
-2. OFX client: signon, statement sync, order submission via the custom message set.
-3. XMPP client: home timeline ingestion + posting.
-4. CLI REPL: `buy sell positions orders feed post agent on|off quit`.
-5. Strategy SPI + built-in momentum/threshold demo strategy; decision loop wiring
-   (market view from statements/feed → `Strategy.evaluate` → order via OFX).
-- **Exit criteria**: `agent on` trades autonomously end-to-end and its fills appear on FxcPub.
+1. [x] MariaDB persistence (JDBC + `schema.sql`): config, decision log, order/position mirror.
+2. [x] OFX client: signon, statement sync, order submission via the custom message set.
+3. [x] XMPP client: home timeline ingestion + posting (Smack `FeedClient`).
+4. [x] CLI REPL: `buy sell positions orders feed post agent on|off quit`.
+5. [x] Strategy SPI + built-in agents (`rando`/`booker`/`bookfish`); decision loop wiring
+   (market view from statements/feed → `Strategy.decide` → order via OFX). The `booker` agent is
+   fed by the FxcBroker order-book relay (FxcBroker/docs/stories/001).
+6. [x] Opt-in **Gatling** multi-agent runner for performance / bulk simulation
+   (FxcInvestor/docs/stories/005).
+- **Exit criteria (met)**: `agent on` trades autonomously end-to-end and its fills appear on FxcPub.
+  See FxcBroker/docs/PROBLEMS.md B9 for the signon credential-default fix found while validating
+  the REPL order→fill flow.
 
 ## Phase 5 — Cold-data archival — DONE
 

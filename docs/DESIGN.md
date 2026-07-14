@@ -1,6 +1,9 @@
 # FXC System Design
 
-Status: **draft for review — no implementation yet.**
+Status: **implemented through Phase 5** (all four components + cold-data archival are built and
+tested; see [PLAN.md](PLAN.md) for phase-by-phase status). This document remains the architectural
+reference — the settled decisions and data model below match the code; the Mastodon gateway (§6.2)
+and derivatives (§6.3) are the notable not-yet-built pieces.
 
 ## 1. Overview
 
@@ -241,11 +244,13 @@ Confirmed dependency coordinates and versions live in `.reference/README.md` (ga
 
 1. **⚠️ Tigase adoption (FxcPub XMPP core), run unmodified.** Vysper was dropped as unviable on
    Java 21 and replaced by stock Tigase 8.4.1 (full write-up in [PROBLEMS.md](PROBLEMS.md) P1/P2).
-   Settled: Tigase runs **100% unmodified** as an **external service** (no embed-as-library API,
-   no custom plugins), and FxcPub interacts with it purely as a **standard XMPP client** (§4.3).
-   Remaining decisions for a **Phase-0 spike**: accept the **AGPLv3** license; confirm JDK 21
-   (low risk — vendor Docker image builds on 21); and choose the client-side integration path
-   (trusted admin Smack client vs. ad-hoc commands) for publishing to / reading from PubSub.
+   Settled (Phase 0/3 complete): Tigase runs **100% unmodified** as an **external service** (no
+   embed-as-library API, no custom plugins), and FxcPub interacts with it purely as a **standard
+   XMPP client** (§4.3) via a trusted service-account Smack client. AGPLv3 is accepted.
+   **Resolved JDK finding:** Tigase 8.4.1 runs on **JDK 17, not 21/25** — its bundled Groovy/ASM
+   cannot read Java 21+ class files (`Unsupported class file major version 65`). Our image builds
+   `FROM eclipse-temurin:17-jre`; because Tigase is a separate container this does not constrain
+   FXC's own Java-21 processes (see README "JDK requirements", PROBLEMS.md P5).
 2. **ToDo: Mastodon-compatibility gateway (late-phase addon).** Exposing a Mastodon-compatible
    REST API (`/api/v1/statuses`, `/timelines/home`, `/timelines/public`, `/accounts/:id`,
    `/follows`, stub OAuth) so stock Mastodon clients can read/post is **deferred**, out of the
