@@ -1,12 +1,14 @@
 # FXC Implementation Plan
 
-Status: **Phases 0–5 complete; Phase 6 (end-to-end demo & hardening) next.** FxcInvestor delivered
-the full Strategy SPI + all three agents (`rando`, `booker`, `bookfish`), the OFX client, the
-single-instance runner, live XMPP feed ingestion, the broker order-book relay feeding `booker`, the
-opt-in **Gatling multi-agent runner**, **MariaDB decision-log persistence**, and the interactive
-**CLI REPL**. Phase 5 added shared `ColdStore` archival across all three GridGain components with
-FxcPub deep-history fallback. ~50 tests across the modules (three archival integration tests are
-gated on the MariaDB container). Companion to [DESIGN.md](DESIGN.md).
+Status: **Phases 0–6 complete; only the Phase 7 Mastodon-gateway addon remains (deferred).** All
+four components run together end to end: an autonomous FxcInvestor agent trades over OFX, the fill
+routes Broker → Exchange, is drop-copied to FxcPub, published to the broker's XMPP feed, and read
+back by the investor — proven by `scripts/demo.sh` and the `EndToEndDemoIT` orchestrator. Phase 4
+delivered the full Strategy SPI + all three agents (`rando`, `booker`, `bookfish`), OFX client,
+single-instance + opt-in **Gatling** runners, XMPP feed ingestion, MariaDB decision log, and the
+interactive **CLI REPL**. Phase 5 added shared `ColdStore` archival across all three GridGain
+components with FxcPub deep-history fallback. ~50 tests across the modules (integration tests skip
+gracefully without MariaDB/Tigase). Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
 first (everything depends on it), then Broker, then Pub, then Investor, then archival, then the
@@ -111,11 +113,23 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
   in MariaDB. Verified by `ExchangeArchiveIntegrationTest`, `BrokerArchiveIntegrationTest`,
   `PubArchiveIntegrationTest` (all gated on the MariaDB container).
 
-## Phase 6 — End-to-end demo & hardening
+## Phase 6 — End-to-end demo & hardening — DONE
 
-- `demo` compose/script: start MariaDB + Tigase + all four components, seed two investor accounts,
-  run the agent, watch the feed over XMPP.
-- Cross-component integration test in CI; README updated with the demo walkthrough.
+- [x] `demo` script (`scripts/demo.sh`): brings up MariaDB + Tigase, starts all three backend
+  components in dependency order, seeds **two** investor accounts (cash + ACME shares — FxcBroker
+  `Main` now seeds `account.dev`/`account.dev2`), runs two autonomous `rando` agents whose orders
+  cross to produce fills, and streams the fills back off the FxcPub XMPP feed. Leaves infra up on
+  exit (`--down` to tear down); backend logs in `build/demo-logs/`.
+- [x] Cross-component integration orchestrator: `com.fxc.investor.EndToEndDemoIT` boots
+  FxcExchange + FxcBroker (with drop-copy) + FxcPub against live Tigase, drives a `rando` agent over
+  OFX, and asserts the full chain — order **fills**, the fill is **published** to the broker's feed,
+  and the investor **reads it back over XMPP** and folds it into its market view. Skips (does not
+  fail) when Tigase is unreachable.
+- [x] README updated with the demo walkthrough and a Tests section documenting which integration
+  tests need MariaDB / Tigase and how they skip.
+- **Exit criteria (met)**: the four components run together end to end; a fill originating from an
+  autonomous agent surfaces on the investor's own feed. Verified by `EndToEndDemoIT` (18s against
+  live Tigase).
 
 ## Phase 7 — Mastodon-compatibility gateway (late-phase addon)
 

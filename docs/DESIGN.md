@@ -1,9 +1,9 @@
 # FXC System Design
 
-Status: **implemented through Phase 5** (all four components + cold-data archival are built and
-tested; see [PLAN.md](PLAN.md) for phase-by-phase status). This document remains the architectural
-reference — the settled decisions and data model below match the code; the Mastodon gateway (§6.2)
-and derivatives (§6.3) are the notable not-yet-built pieces.
+Status: **implemented through Phase 6** (all four components, cold-data archival, and the
+end-to-end demo are built and tested; see [PLAN.md](PLAN.md) for phase-by-phase status). This
+document remains the architectural reference — the settled decisions and data model below match the
+code; the Mastodon gateway (§6.2) and derivatives (§6.3) are the notable not-yet-built pieces.
 
 ## 1. Overview
 

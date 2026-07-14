@@ -60,9 +60,48 @@ docker compose up -d
 
 ## Run a module
 
+Bring the order up: **Exchange first** (everything routes to it), then **Pub** (needs Tigase),
+then **Broker** (connects to Exchange + Pub, serves OFX), then **Investor**.
+
 ```sh
 ./gradlew :FxcExchange:run
-./gradlew :FxcBroker:run
 ./gradlew :FxcPub:run
+./gradlew :FxcBroker:run
 ./gradlew :FxcInvestor:run
 ```
+
+Each reads `conf/<component>.conf` with localhost defaults; override any key with `-Dkey=value`
+(e.g. `./gradlew :FxcInvestor:run -Dmode=repl` for the interactive REPL).
+
+## Demo (end-to-end)
+
+`scripts/demo.sh` is the full Phase-6 walkthrough. It brings up MariaDB + Tigase, starts all three
+backend components in dependency order, seeds two investor accounts (cash + ACME shares), then runs
+two autonomous `rando` agents whose orders cross to produce fills. Each fill is drop-copied to
+FxcPub, published to the broker's XMPP feed, and echoed back by the investors reading that feed —
+the whole loop, live:
+
+```sh
+docker compose up -d          # or let the script do it
+scripts/demo.sh               # leaves infra up on exit; use --down to also stop it
+```
+
+Backend logs land in `build/demo-logs/`. The deterministic, CI-friendly proof of the same
+Investor → Broker → Exchange → fill → Pub → Investor-feed path is the JUnit orchestrator
+`com.fxc.investor.EndToEndDemoIT`:
+
+```sh
+docker compose up -d                                   # Tigase must be reachable
+./gradlew :FxcInvestor:test --tests '*EndToEndDemoIT'  # skips gracefully if Tigase is down
+```
+
+## Tests
+
+```sh
+./gradlew test
+```
+
+Integration tests that need infrastructure **skip** (they don't fail) when it's unreachable:
+the archival tests (`*ArchiveIntegrationTest`) need MariaDB on `127.0.0.1:3306`; the XMPP-feed and
+end-to-end tests (`PubIntegrationIT`, `FeedIngestionIT`, `EndToEndDemoIT`) need Tigase on
+`127.0.0.1:5222`. Run `docker compose up -d` first to exercise them.

@@ -44,7 +44,14 @@ public final class Main {
         String ofxUser = config.getString("ofx.user", "investor");
         String ofxPassword = config.getString("ofx.password", "secret");
         String brokerId = config.getString("ofx.brokerId", "FXC-BROKER");
+        // Two dev accounts (PLAN Phase 6): both seeded with cash AND shares so buys and sells are
+        // fundable and can cross each other in the demo.
         String devAccount = config.getString("account.dev", "000123456");
+        String devAccount2 = config.getString("account.dev2", "000654321");
+        BigDecimal devCash = new BigDecimal(config.getString("account.seedCash", "1000000"));
+        String seedSymbol = config.getString("account.seedSymbol", "ACME");
+        BigDecimal seedShares = new BigDecimal(config.getString("account.seedShares", "1000"));
+        BigDecimal seedSharePrice = new BigDecimal(config.getString("account.seedSharePrice", "42.00"));
 
         // Cold-data archival to MariaDB (best-effort — runs without it if the DB is unreachable).
         ColdStore coldStore = openColdStore(config);
@@ -58,8 +65,13 @@ public final class Main {
                 gridInstance, gridDiscoveryPort, workDir,
                 FixSettingsFactory.initiator(exchangeHost, exchangePort, senderCompId, "EXCHANGE"),
                 ofxHost, ofxPort, ofxUser, ofxPassword, brokerId,
-                accounts -> accounts.seedAccount(devAccount, "Dev Investor", "USD",
-                        Map.of("USD", new BigDecimal("1000000"))),
+                accounts -> {
+                    for (String acct : new String[] {devAccount, devAccount2}) {
+                        accounts.seedAccount(acct, "Dev Investor " + acct, "USD",
+                                Map.of("USD", devCash));
+                        accounts.seedShares(acct, seedSymbol, seedShares, seedSharePrice);
+                    }
+                },
                 dropCopyEnabled
                         ? FixSettingsFactory.initiator(pubHost, pubPort, senderCompId, "FXCPUB")
                         : null,
@@ -72,7 +84,8 @@ public final class Main {
             shutdown.countDown();
         }));
         System.out.println("FxcBroker started. OFX on port " + server.ofxPort()
-                + ", account " + devAccount + " seeded. Ctrl-C to stop.");
+                + ", accounts " + devAccount + "/" + devAccount2 + " seeded (cash + " + seedSymbol
+                + " shares). Ctrl-C to stop.");
         shutdown.await();
     }
 

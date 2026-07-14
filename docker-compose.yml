@@ -42,8 +42,9 @@ services:
     restart: "no"
 
   tigase:
-    # Builds a thin image around the UNMODIFIED Tigase 8.4.1 community dist on JDK 21 (the official
-    # tigase/tigase-xmpp-server image is a non-runnable skeleton — see docker/tigase/Dockerfile).
+    # Builds a thin image around the UNMODIFIED Tigase 8.4.1 community dist on JDK 17 (Tigase's
+    # bundled Groovy/ASM cannot read Java 21+ class files; the official tigase/tigase-xmpp-server
+    # image is a non-runnable skeleton — see docker/tigase/Dockerfile and README "JDK requirements").
     image: fxc/tigase:8.4.1
     container_name: fxc-tigase
     depends_on:

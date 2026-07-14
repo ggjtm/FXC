@@ -23,9 +23,11 @@ dependencies {
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
     // Exit-criteria integration test drives a live FxcExchange + FxcBroker (PLAN Phase 4);
-    // the test's contra-liquidity client speaks FIX directly to the exchange.
+    // the test's contra-liquidity client speaks FIX directly to the exchange. The Phase-6
+    // end-to-end orchestrator (EndToEndDemoIT) additionally boots FxcPub against live Tigase.
     testImplementation(project(":FxcExchange"))
     testImplementation(project(":FxcBroker"))
+    testImplementation(project(":FxcPub"))
     testImplementation(libs.bundles.quickfixj)
 
     // The Gatling simulation reuses the investor's production strategy + OFX request-building and
