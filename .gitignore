@@ -4,6 +4,7 @@ build/
 .idea/
 *.iml
 out/
+*.log
 .DS_Store
 .mcp.json
 .reference/
