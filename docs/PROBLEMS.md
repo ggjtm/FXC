@@ -57,7 +57,8 @@ settled some; the rest are for a Phase-0 spike before FxcPub implementation (Pha
 - **JDK — Tigase must run on 17, RESOLVED.** Tigase 8.4.1 bundles a Groovy whose ASM cannot read
   Java 21 class files (`Unsupported class file major version 65`), so the server fails to start on
   JDK 21/25. Our Tigase image is based on `eclipse-temurin:17-jre`. Because Tigase runs as a
-  separate container, FXC's own components remain on JDK 21 — no conflict.
+  separate container, FXC's own components remain on JDK 21 — no conflict. (See the JDK table in the
+  [README](../README.md) for the full per-process JDK matrix.)
 - **License — AGPLv3. DECISION: ACCEPTED via the unmodified-server strategy (2026-07-13).** Tigase
   XMPP Server is **AGPLv3** (separate commercial license available). Jeremy accepted the approach:
   run Tigase **100% unmodified** to avoid triggering AGPLv3 constraints — customization is limited
@@ -89,7 +90,7 @@ there surfaced three real issues, all resolved without modifying Tigase's code:
 - **JDK: must be 17, not 21+.** Tigase 8.4.1 bundles a Groovy whose ASM can't read Java 21 class
   files (`Unsupported class file major version 65`). **Fix:** base the Tigase image on
   `eclipse-temurin:17-jre`. It runs as a separate container, so FXC's own components stay on 21.
-  (Updates P5 below.)
+  (See the JDK table in the [README](../README.md).)
 - **MariaDB FK-signedness incompatibility.** Tigase's MySQL schema declares
   `tig_broadcast_recipients.jid_id` as signed `BIGINT` but parent `tig_broadcast_jids.jid_id` as
   `BIGINT UNSIGNED`; MySQL tolerates it, MariaDB rejects it (errno 150), aborting the schema load.
@@ -130,9 +131,56 @@ order-entry message set can live. Not a blocker — folded into the FxcBroker de
 
 ---
 
-## P4 — GridGain 8 CE is not on Maven Central — **MITIGATED**
+## P4 — GridGain 8 artifacts are not on Maven Central — **MITIGATED**
 
-See [DESIGN.md §6.7](DESIGN.md). Build must add the GridGain Nexus repository, or use the
-API-compatible Apache Ignite 2.x fallback (identical `org.apache.ignite.*` namespace). Embedded
-GridGain/Ignite also requires a specific `--add-opens` flag set on JDK 21
-(`.reference/gridgain/README.md`).
+See [DESIGN.md §6.7](DESIGN.md). GridGain 8 artifacts (any edition) are published only to the
+GridGain Nexus repository, which the root `build.gradle.kts` declares. Embedded GridGain on JDK 21
+also requires a specific `--add-opens` flag set (`igniteJvmArgs`; see
+`.reference/gridgain/README.md`).
+
+**Update (2026-07-27).** The project moved from GridGain 8 **Community Edition** to **Ultimate
+Edition** (`org.gridgain:gridgain-ultimate`), and the API-compatible Apache Ignite 2.x drop-in
+fallback was **removed** — so the Nexus repo is now a hard requirement and the node needs a signed
+license. See **P5**.
+
+---
+
+## P5 — GridGain Ultimate Edition: licensing & the CE→Ultimate switch — **RESOLVED** (2026-07-27)
+
+**Change.** Switched the hot-state engine from GridGain 8 Community Edition
+(`org.gridgain:ignite-core`) to **Ultimate Edition** (`org.gridgain:gridgain-ultimate`, which
+transitively pulls in `ignite-core` + `gridgain-core`) and deleted the Apache Ignite 2.x fallback
+from the version catalog. Ultimate requires a signed license, wired into each component's `GridNode`
+via `GridGainConfiguration.setLicenseUrl(...)` on the `IgniteConfiguration` plugin list.
+
+**Configuration (single source of truth).** `gridgain.properties` at the repo root names the license
+file (`gridgain.license.file=gridgain-license.xml`); the root `build.gradle.kts` reads it once,
+resolves it to an absolute `file:///` URL against the repo root, and passes it to **every** Gradle
+`run` and `test` JVM as `-Dgridgain.license.url`. `GridNode.licenseUrl()` also honours that system
+property (and the `GRIDGAIN_LICENSE_URL` env var) and keeps a bare-filename default as a last-resort
+fallback for non-Gradle (packaged-dist) launches. The license file itself is **gitignored**.
+
+**Lessons learned** — each was a distinct failure that surfaced only at node start, never at compile
+time, so they were found one layer at a time by re-running the suite:
+
+- **`setLicenseUrl` wants a URL, not a path.** A bare `gridgain-license.xml` throws
+  `MalformedURLException`. Resolve paths to a `file://` URL before handing them over.
+- **`File.toURI()` ≠ `Path.toUri()`.** `File.toURI()` emits a single-slash `file:/…` (no authority);
+  `Path.toUri()` emits the canonical `file:///…`. A scheme guard that only checks for `"://"` misses
+  the single-slash form and re-mangles it — match a leading `scheme:` instead, and prefer
+  `Path.toUri()` when generating the URL.
+- **A forked Gradle JVM's CWD is the *subproject* dir, not the repo root.** A relative license path
+  resolves against `FxcBroker/` (etc.), where the root-level license does not exist
+  (`FileNotFoundException`). Pass an absolute URL from the build; do not rely on the CWD default.
+- **GridGain 8 licenses are XML; GridGain 9 licenses are JSON.** A GridGain 9 `gridgain-license.json`
+  fed to the GG8 engine fails with `ProductLicenseException` → `Unexpected character '{' … expected
+  '<'` (its `GridEntLicenseProcessor` parses XML). Use the `gridgain-license.xml` (v2.1) form for
+  8.9.x.
+- **Kotlin-DSL gotcha:** with the `java` plugin applied, the bareword `java` resolves to Gradle's
+  Java *extension*, so `java.util.Properties` fails to compile (`Unresolved reference: util`). Add an
+  explicit `import java.util.Properties` at the top of `build.gradle.kts`.
+
+**Verification.** Full suite green (64 tests, 0 failures) and `:FxcExchange:run` boots the licensed
+node (`FxcExchange started.`) with the license resolved from `gridgain.properties`. The build
+launcher must still be JDK 21 (JDK 25 crashes the Gradle Kotlin-DSL parser — see the README JDK
+table).

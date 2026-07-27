@@ -2,8 +2,9 @@
 
 A multi-module Gradle project of four independent system components plus a shared library. The
 GridGain-backed components (Exchange, Broker, Pub) hold hot state in an embedded in-memory
-GridGain 8 node and archive cold/terminal data to MariaDB; FxcInvestor is a MariaDB-backed agent
-and REPL client.
+GridGain 8 Ultimate Edition node and archive cold/terminal data to MariaDB; FxcInvestor is a
+MariaDB-backed agent and REPL client. Running a GridGain component requires a license — see
+[GridGain license](#gridgain-license).
 
 ## Modules
 
@@ -43,6 +44,21 @@ non-obvious failures, so they are called out per component below.
   export JAVA_HOME=$(/usr/libexec/java_home -v 21)   # macOS
   ```
   Or pin it durably in `gradle.properties` with `org.gradle.java.home=/path/to/jdk-21`.
+
+## GridGain license
+
+The embedded engine is **GridGain 8 Ultimate Edition**, a licensed edition — Exchange, Broker, and
+Pub each load a signed license when their node starts. This is needed to **run** (including
+`./gradlew test`, since most GridGain tests boot a node), but not to compile or assemble.
+
+- Place the license at the **repo root** as `gridgain-license.xml` — a GridGain 8 **XML** license
+  (v2.1), *not* the GridGain 9 JSON form. It is **gitignored**; obtain it from your GridGain contract.
+- `gridgain.properties` (repo root, committed) is the single place that names the license location.
+  The build reads it and passes the resolved URL to every `run`/`test` JVM. Override ad hoc with
+  `-Dgridgain.license.url=<url>` or `GRIDGAIN_LICENSE_URL=<url>`.
+
+Without a valid license, node start fails with `ProductLicenseException`. See
+[docs/BUILDING.md](docs/BUILDING.md#gridgain-license) and [docs/PROBLEMS.md](docs/PROBLEMS.md) P5.
 
 ## Infrastructure
 

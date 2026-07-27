@@ -96,9 +96,11 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
     Grid deployments is mechanical and deferred until multi-node scale-out is actually needed.
 - Operational data lives in **GridGain SQL tables** (caches with query entities / `CREATE TABLE`),
   **in-memory by default**; GridGain native persistence stays off unless configured.
-- Dependency: GridGain 8 Community Edition artifacts (`org.gridgain:ignite-core` et al. from the
-  GridGain Maven repository). Apache Ignite 2.x is the API-compatible fallback if artifact access
-  is a problem.
+- Dependency: GridGain 8 **Ultimate Edition** artifacts (`org.gridgain:gridgain-ultimate` et al.
+  from the GridGain Nexus repository). Ultimate is a licensed edition — each embedded node loads a
+  signed license (`gridgain-license.xml`) via `GridGainConfiguration.setLicenseUrl(...)`, sourced
+  from the root `gridgain.properties` (see PROBLEMS.md P5). The former API-compatible Apache Ignite
+  2.x drop-in fallback has been removed.
 
 ### 3.2 MariaDB (durable + cold)
 
@@ -286,10 +288,12 @@ Confirmed dependency coordinates and versions live in `.reference/README.md` (ga
    map to `POSOTHER`/`OtherPosition` with a synthetic `SECID` (e.g. `UNIQUEID=FX:EURUSD`).
 7. **Auth realism** — OFX signon (and the deferred Mastodon OAuth) use static dev credentials
    initially.
-8. **GridGain 8 artifact access** — GridGain CE is **not on Maven Central**; the build must add
-   the GridGain Nexus repo, or use the Apache Ignite 2.x fallback (identical package namespace,
-   so code is unchanged). Embedded Ignite/GridGain on JDK 21 also needs a specific `--add-opens`
-   flag set — captured in `.reference/gridgain/README.md`.
+8. **GridGain 8 artifact access & licensing** — GridGain 8 Ultimate Edition
+   (`org.gridgain:gridgain-ultimate`) is **not on Maven Central**; the build adds the GridGain Nexus
+   repo. Ultimate is licensed: each node loads `gridgain-license.xml` (a GridGain 8 **XML** license —
+   not the GridGain 9 JSON form) via the single-source `gridgain.properties`. The Apache Ignite 2.x
+   fallback has been removed. Embedded GridGain on JDK 21 also needs a specific `--add-opens` flag
+   set — captured in `.reference/gridgain/README.md`. See PROBLEMS.md P4/P5.
 9. **Javalin version (gateway phase only)** — needed by the deferred Mastodon gateway (§6.2), not
    the core. Current is **7.2.2** (Java 17+), whose routing API moved into a `config.routes { }`
    block; pin Javalin 6.x if we prefer the classic `app.get(...)` API.

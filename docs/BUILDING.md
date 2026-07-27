@@ -11,9 +11,13 @@ per-component JDK rules and the runtime infrastructure, see the root [README](..
 | **Gradle** | 8.11.1 | Do not install it — use the checked-in wrapper (`./gradlew`); it downloads the pinned version on first run. |
 | Docker + Docker Compose | any recent | **Only for running / integration tests**, not for building. Provides MariaDB + Tigase. |
 
-Nothing else is required to build: dependencies (GridGain 8 CE, QuickFIX/J, OFX4J, Smack, MariaDB
-Connector/J, HikariCP, Gatling) resolve from Maven Central and the GridGain Nexus repo declared in
-the root `build.gradle.kts`.
+Nothing else is required to build: dependencies (GridGain 8 Ultimate Edition, QuickFIX/J, OFX4J,
+Smack, MariaDB Connector/J, HikariCP, Gatling) resolve from Maven Central and the GridGain Nexus repo
+declared in the root `build.gradle.kts`.
+
+> **Compiling needs no license; *running* a GridGain component does.** See
+> [GridGain license](#gridgain-license) below — a valid `gridgain-license.xml` must be present to
+> start a node (i.e. for `./gradlew test` and `:*:run`), but not to `compileJava`/`assemble`.
 
 ### Selecting JDK 21
 
@@ -62,6 +66,23 @@ Run from the repository root.
 # Remove all build outputs.
 ./gradlew clean
 ```
+
+### GridGain license
+
+The GridGain-backed components (FxcExchange/FxcBroker/FxcPub) run **Ultimate Edition**, which needs a
+signed license to start a node. This affects **running** — `./gradlew test` (most GridGain tests boot
+an embedded node) and `:*:run` — not plain compilation.
+
+- Put the license at the **repo root** as `gridgain-license.xml` (a GridGain 8 **XML** license, v2.1;
+  *not* the GridGain 9 JSON form). The file is **gitignored** — obtain it from your GridGain contract.
+- `gridgain.properties` (repo root, committed) is the single source of truth for its location
+  (`gridgain.license.file=gridgain-license.xml`). The build reads it and passes the resolved
+  `file:///` URL to every `run`/`test` JVM as `-Dgridgain.license.url`. Point elsewhere by editing
+  that key, or override per-invocation with `-Dgridgain.license.url=<url>` /
+  `GRIDGAIN_LICENSE_URL=<url>`.
+
+Without a valid license, node start fails with `ProductLicenseException` (and the GridGain
+integration/unit tests that boot a node fail rather than skip).
 
 ### Tests and infrastructure
 
@@ -116,6 +137,12 @@ The `application` plugin also provides a JVM-embedding note for the GridGain com
 tar xf FxcExchange/build/distributions/FxcExchange-0.1.0-SNAPSHOT.tar
 ./FxcExchange-0.1.0-SNAPSHOT/bin/FxcExchange
 ```
+
+> **License from a packaged dist.** The generated start scripts carry the `--add-opens` flags but
+> **not** the `-Dgridgain.license.url` system property (that is injected only for the Gradle
+> `run`/`test` tasks). A dist therefore falls back to `GridNode`'s default — `gridgain-license.xml`
+> resolved against the **current working directory**. Run from a directory that contains the license,
+> or set `GRIDGAIN_LICENSE_URL` / `-Dgridgain.license.url=<url>` explicitly.
 
 During development it is usually simpler to run in place with `./gradlew :FxcExchange:run` (see the
 README's "Run a module" and "Demo" sections for start-up order and the end-to-end walkthrough).

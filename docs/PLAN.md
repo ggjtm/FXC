@@ -21,9 +21,10 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
   left as designed extension points per DESIGN §6.3), FIX 4.4 dictionary resource, config
   loader, OFX private-message-set constants (empty placeholder for now).
 - Wire dependencies from the confirmed version catalog in `.reference/README.md`: QuickFIX/J
-  3.0.1, GridGain 8 CE 8.9.35 (add the GridGain Nexus repo; fall back to Apache Ignite 2.18.0
-  if blocked — see DESIGN §6.8), OFX4J 1.39, Smack 4.4.8, MariaDB Connector/J 3.5.9, HikariCP
-  7.1.0. Add the JDK 21 `--add-opens` flags for Ignite/GridGain. (Javalin is **not** wired now —
+  3.0.1, GridGain 8 Ultimate Edition 8.9.35 (add the GridGain Nexus repo; the node needs a signed
+  `gridgain-license.xml`, referenced from the root `gridgain.properties` — see PROBLEMS.md P5),
+  OFX4J 1.39, Smack 4.4.8, MariaDB Connector/J 3.5.9, HikariCP 7.1.0. Add the JDK 21 `--add-opens`
+  flags for GridGain. (Javalin is **not** wired now —
   it belongs to the deferred Mastodon gateway, Phase 7 / DESIGN §6.2.)
 - **⚠️ Tigase spike (blocking gate for FxcPub):** run **stock, unmodified** Tigase 8.4.1 as a
   docker-compose service (image `tigase/tigase-xmpp-server`) against MariaDB (load its repository

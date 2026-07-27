@@ -3,8 +3,7 @@
 # Javalin is intentionally absent — it belongs to the deferred Mastodon gateway (PLAN Phase 7).
 
 [versions]
-gridgain = "8.9.35"          # GridGain 8 CE; NOT on Maven Central (see [repositories] in root build)
-ignite = "2.18.0"            # Apache Ignite 2.x — API-compatible fallback, same org.apache.ignite.* namespace
+gridgain = "8.9.35"          # GridGain 8 Ultimate Edition; NOT on Maven Central (GridGain Nexus repo in root build). Requires gridgain-license.json.
 quickfixj = "3.0.1"
 ofx4j = "1.39"
 smack = "4.4.8"
@@ -14,13 +13,11 @@ slf4j = "2.0.16"
 junit = "5.11.3"
 
 [libraries]
-# --- GridGain 8 CE (primary hot-state engine) ---
-gridgain-core = { module = "org.gridgain:ignite-core", version.ref = "gridgain" }
+# --- GridGain 8 Ultimate Edition (primary hot-state engine; licensed) ---
+# gridgain-ultimate transitively pulls in ignite-core + gridgain-core; the latter provides
+# org.gridgain.grid.configuration.GridGainConfiguration, used by GridNode to load the license.
+gridgain-ultimate = { module = "org.gridgain:gridgain-ultimate", version.ref = "gridgain" }
 gridgain-indexing = { module = "org.gridgain:ignite-indexing", version.ref = "gridgain" } # required for SQL
-
-# --- Apache Ignite 2.x (drop-in fallback; unused unless GridGain access is blocked) ---
-ignite-core = { module = "org.apache.ignite:ignite-core", version.ref = "ignite" }
-ignite-indexing = { module = "org.apache.ignite:ignite-indexing", version.ref = "ignite" }
 
 # --- FIX engine ---
 quickfixj-core = { module = "org.quickfixj:quickfixj-core", version.ref = "quickfixj" }
@@ -48,7 +45,6 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "jun
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
 [bundles]
-gridgain = ["gridgain-core", "gridgain-indexing"]
-ignite = ["ignite-core", "ignite-indexing"]
+gridgain = ["gridgain-ultimate", "gridgain-indexing"]
 smack = ["smack-java8", "smack-tcp", "smack-extensions", "smack-experimental"]
 quickfixj = ["quickfixj-core", "quickfixj-fix44"]

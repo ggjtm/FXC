@@ -7,6 +7,7 @@ import org.apache.ignite.configuration.DataStorageConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
+import org.gridgain.grid.configuration.GridGainConfiguration;
 
 /**
  * Bootstraps a single-node, in-memory GridGain/Ignite cluster for a component (docs/DESIGN.md §3.1).
@@ -57,9 +58,34 @@ public final class GridNode implements AutoCloseable {
         cfg.setPeerClassLoadingEnabled(false);
         // Explicit: in-memory only. Native persistence stays disabled (docs/DESIGN.md §3.1).
         cfg.setDataStorageConfiguration(new DataStorageConfiguration());
+        // GridGain Ultimate Edition requires a license (see docs/BUILDING.md). Point the embedded
+        // node at the license file; the plugin config supplies it to the GridGain runtime.
+        cfg.setPluginConfigurations(new GridGainConfiguration().setLicenseUrl(licenseUrl()));
 
         Ignite ignite = Ignition.start(cfg);
         return new GridNode(ignite);
+    }
+
+    /**
+     * Resolve the GridGain license location. Overridable via the {@code gridgain.license.url}
+     * system property or the {@code GRIDGAIN_LICENSE_URL} environment variable; otherwise defaults
+     * to {@code gridgain-license.xml}, resolved relative to the node's launch directory.
+     */
+    private static String licenseUrl() {
+        String location = System.getProperty("gridgain.license.url");
+        if (location == null || location.isBlank()) {
+            location = System.getenv("GRIDGAIN_LICENSE_URL");
+        }
+        if (location == null || location.isBlank()) {
+            location = "gridgain-license.xml";
+        }
+        // GridGain's setLicenseUrl expects a URL, not a bare path. Pass through anything that
+        // already carries a URL scheme (file:, file://, http://, …); otherwise resolve the path to
+        // an absolute file:// URL.
+        if (location.matches("^[a-zA-Z][a-zA-Z0-9+.-]*:.*")) {
+            return location;
+        }
+        return java.nio.file.Path.of(location).toAbsolutePath().toUri().toString();
     }
 
     public Ignite ignite() {

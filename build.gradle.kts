@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     java
 }
@@ -28,13 +30,37 @@ val igniteJvmArgs = listOf(
 )
 extra["igniteJvmArgs"] = igniteJvmArgs
 
+// --- GridGain license: single source of truth ---
+// Read the license file reference from gridgain.properties (repo root) and resolve it to a URL that
+// every GridGain component's Gradle-launched JVM (run + test) receives as -Dgridgain.license.url.
+// This is the one place to change the license location for Gradle launches; GridNode.licenseUrl()
+// keeps an in-code default only as a fallback for non-Gradle launches (e.g. the packaged dist).
+val gridgainLicenseUrl: String = run {
+    val propsFile = rootProject.file("gridgain.properties")
+    val props = Properties()
+    if (propsFile.exists()) {
+        propsFile.inputStream().use { props.load(it) }
+    }
+    val ref = props.getProperty("gridgain.license.file")?.trim()
+        ?.takeUnless { it.isEmpty() } ?: "gridgain-license.xml"
+    // A value already carrying a URL scheme (file:, http:, ...) is used verbatim; otherwise it is a
+    // path resolved relative to the repo root and converted to a canonical file:/// URL (Path.toUri,
+    // not File.toURI, so it carries an authority component and passes GridNode's scheme guard).
+    if (Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:.*").matches(ref)) {
+        ref
+    } else {
+        rootProject.file(ref).toPath().toUri().toString()
+    }
+}
+extra["gridgainLicenseUrl"] = gridgainLicenseUrl
+
 allprojects {
     group = "com.fxc"
     version = "0.1.0-SNAPSHOT"
 
     repositories {
         mavenCentral()
-        // GridGain 8 CE is not published to Maven Central (see .reference/README.md risk 2).
+        // GridGain 8 (Ultimate Edition) is not published to Maven Central (see .reference/README.md risk 2).
         maven {
             name = "GridGain"
             url = uri("https://www.gridgainsystems.com/nexus/content/repositories/external")
@@ -51,8 +77,19 @@ subprojects {
         }
     }
 
+    // Every Gradle-launched GridGain component JVM gets the license location resolved once from
+    // gridgain.properties (see the root build). Forked JVMs run with the subproject dir as CWD, not
+    // the repo root where the license lives, so an absolute file:/// URL is required — GridNode's
+    // bare-filename default would not resolve here.
     tasks.withType<Test> {
         useJUnitPlatform()
         jvmArgs(igniteJvmArgs)
+        systemProperty("gridgain.license.url", gridgainLicenseUrl)
+    }
+    // The `run` targets of the GridGain application modules (FxcExchange/FxcBroker/FxcPub). The
+    // application plugin registers `run` in each subproject's own build script (evaluated after
+    // this block), so configureEach picks it up lazily. Harmless for non-GridGain run tasks.
+    tasks.withType<JavaExec>().configureEach {
+        systemProperty("gridgain.license.url", gridgainLicenseUrl)
     }
 }
