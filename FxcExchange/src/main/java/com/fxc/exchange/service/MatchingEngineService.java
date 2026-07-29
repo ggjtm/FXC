@@ -7,9 +7,12 @@ import com.fxc.exchange.book.NewOrder;
 import com.fxc.exchange.book.Order;
 import com.fxc.exchange.book.Side;
 import com.fxc.exchange.book.Trade;
+import com.fxc.exchange.book.TradingSession;
 import com.fxc.exchange.grid.ExchangeRepository;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.LongSupplier;
 
@@ -80,6 +83,36 @@ public final class MatchingEngineService {
             notifyListeners(new ExchangeEvent(order.symbol(), List.of(), clock.getAsLong()));
         });
         return cancelled;
+    }
+
+    /**
+     * Clear one symbol's book, or every book when {@code symbol} is null ("clear the order book",
+     * docs/DESIGN.md §6). Persists each cancelled order and fires one market-data event per affected
+     * symbol so subscribers see the emptied book.
+     *
+     * @return the cancelled orders — the caller must report each to its owner via a
+     *         {@link com.fxc.exchange.control.CancelReporter}, or brokers' OMS state will drift
+     */
+    public List<Order> clearBook(String symbol) {
+        List<Order> cancelled = symbol == null ? engine.clearAll() : engine.clearBook(symbol);
+        if (cancelled.isEmpty()) {
+            return cancelled;
+        }
+        long ts = clock.getAsLong();
+        Set<String> touched = new LinkedHashSet<>();
+        for (Order order : cancelled) {
+            repository.upsertOrder(order);
+            touched.add(order.symbol());
+        }
+        for (String touchedSymbol : touched) {
+            notifyListeners(new ExchangeEvent(touchedSymbol, List.of(), ts));
+        }
+        return cancelled;
+    }
+
+    /** The market-state switch backing the console's halt/resume controls. */
+    public TradingSession session() {
+        return engine.session();
     }
 
     public MatchingEngine engine() {

@@ -8,6 +8,7 @@ import com.fxc.exchange.book.OrderStatus;
 import com.fxc.exchange.book.OrderType;
 import com.fxc.exchange.book.Side;
 import com.fxc.exchange.book.Trade;
+import com.fxc.exchange.control.CancelReporter;
 import com.fxc.exchange.service.MarketDataPublisher;
 import com.fxc.exchange.service.MarketDataService;
 import com.fxc.exchange.service.MatchingEngineService;
@@ -55,7 +56,8 @@ import quickfix.field.Text;
  *
  * <p>A broker's identity is the FIX session's counterparty comp id ({@code sessionId.getTargetCompID()}).
  */
-public final class ExchangeApplication extends MessageCracker implements Application, MarketDataPublisher {
+public final class ExchangeApplication extends MessageCracker implements Application, MarketDataPublisher,
+        CancelReporter {
 
     private final MatchingEngineService matchingService;
     private MarketDataService marketDataService;
@@ -235,6 +237,29 @@ public final class ExchangeApplication extends MessageCracker implements Applica
             return; // nothing to report; skip sending an empty incremental
         }
         sendTo((SessionID) target, inc);
+    }
+
+    // --- CancelReporter ---
+
+    /**
+     * Report an administratively cancelled order (an operator clearing the book) to its owning
+     * broker, so the broker's OMS does not go on believing the order is live.
+     *
+     * <p>Failures are contained rather than propagated: clearing the book must cancel every order
+     * even if one broker's session has gone away in the meantime.
+     */
+    @Override
+    public void reportCancelled(Order order) {
+        SessionID sessionId = sessionsByBroker.get(order.broker());
+        if (sessionId == null) {
+            return; // broker never connected; nothing to report to
+        }
+        try {
+            send(sessionId, order, ExecType.CANCELED, OrdStatus.CANCELED,
+                    null, null, order.cumQty(), BigDecimal.ZERO, "order book cleared by exchange");
+        } catch (RuntimeException e) {
+            System.err.println("cancel report failed for " + order.orderId() + ": " + e.getMessage());
+        }
     }
 
     // --- helpers ---

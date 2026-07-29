@@ -2,6 +2,7 @@ package com.fxc.investor;
 
 import com.fxc.common.config.FxcConfig;
 import com.fxc.investor.agent.InvestorAgent;
+import com.fxc.investor.agent.PortfolioCache;
 import com.fxc.investor.agent.SubmittedOrder;
 import com.fxc.investor.feed.FeedClient;
 import com.fxc.investor.ofx.OfxBrokerClient;
@@ -103,7 +104,9 @@ public final class Main {
         // Interactive mode: hand off to the REPL (buy/sell/positions/orders/feed/post/agent/quit).
         if ("repl".equalsIgnoreCase(mode)) {
             new com.fxc.investor.cli.Repl(broker, market, agent, feed, store, account, symbol,
-                    strategyName, xmppUser, intervalMs).run();
+                    strategyName, xmppUser, intervalMs,
+                    new PortfolioCache(broker::fetchPortfolio, account,
+                            config.getInt("agent.portfolioRefreshMs", 5_000))).run();
             return;
         }
 
@@ -114,6 +117,12 @@ public final class Main {
             System.out.println("agent off — nothing to do. Set agent.enabled=true.");
             return;
         }
+
+        // Real holdings, refreshed on an interval rather than per tick: a statement read is an OFX
+        // round trip and the broker's OFX pool is four threads. Before this, both loops passed
+        // PortfolioView.empty() and no strategy could see its own cash or shares.
+        long portfolioRefreshMs = config.getInt("agent.portfolioRefreshMs", 5_000);
+        PortfolioCache portfolio = new PortfolioCache(broker::fetchPortfolio, account, portfolioRefreshMs);
 
         boolean refreshBook = config.getBoolean("agent.refreshBook", "booker".equals(strategyName));
         int done = 0;
@@ -126,7 +135,7 @@ public final class Main {
                     // book relay unavailable; booker falls back to rando behavior
                 }
             }
-            Optional<SubmittedOrder> submitted = agent.step(symbol, PortfolioView.empty());
+            Optional<SubmittedOrder> submitted = agent.step(symbol, portfolio.current());
             submitted.ifPresent(o -> System.out.println("  " + o.intent().side() + " "
                     + o.intent().quantity() + " " + symbol + " @ " + o.snappedPrice()
                     + " -> " + o.status() + " (" + o.clOrdId() + ")"));

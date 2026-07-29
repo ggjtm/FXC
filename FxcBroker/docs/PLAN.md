@@ -42,3 +42,14 @@ shown) against a live FxcExchange with a BROKER2 liquidity client, for both EUR/
 - Requires a running **FxcExchange** (Phase 1, done) as the FIX target.
 - The XMPP publication leg (item 6b) depends on **FxcPub/Tigase**, which is on hold (AGPLv3). The FIX
   drop-copy leg (6a) does not — it targets FxcPub's FIX acceptor and can be built/tested with a stub.
+
+## Post-roadmap stories
+
+- **`docs/stories/001` — investor-requested order-book snapshot — DONE.**
+- **`docs/stories/002` — monitor/controller console — DONE.** Root DESIGN §6.3. Added the repo's first
+  P&L (`pnl/PnlService` + `pnl/FxRates`: session-relative mark-to-market equity in USD, sampled per
+  fill), an operator start/stop-trading gate on `OmsService` with routed/fill/reject counters, the
+  accessors the console needs, and `account_number` + `ts` on `EXECUTION`/`EXECUTION_ARCHIVE` (cold
+  schema v2) — without which a fill could not be attributed to an account at all. Served on a
+  separate HTTP server (`web.http.port`, default 8083) so the OFX endpoint stays POST-only. Verified
+  by `FxRatesTest` (6), `PnlServiceTest` (8), `BrokerWebApiTest` (3).

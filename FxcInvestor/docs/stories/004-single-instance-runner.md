@@ -35,5 +35,5 @@ the autonomous agents plug into.
 ## Notes
 
 - The runner owns the RNG (seedable) and the tick clock, so a single agent is fully reproducible.
-- This runner drives ONE agent in-process; bulk/perf simulation is the separate Gatling runner
-  ([005](005-gatling-multi-agent-runner.md)).
+- This runner drives ONE agent in-process; bulk/perf simulation is the separate Locust load harness
+  ([006](006-locust-multi-agent-runner.md), which superseded the Gatling runner of 005).

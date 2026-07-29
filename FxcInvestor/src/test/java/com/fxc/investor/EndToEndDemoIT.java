@@ -1,5 +1,6 @@
 package com.fxc.investor;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -9,6 +10,7 @@ import com.fxc.broker.oms.FixSettingsFactory;
 import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.exchange.fix.ExchangeServer;
 import com.fxc.investor.agent.InvestorAgent;
+import com.fxc.investor.agent.PortfolioCache;
 import com.fxc.investor.agent.SubmittedOrder;
 import com.fxc.investor.feed.FeedClient;
 import com.fxc.investor.ofx.OfxBrokerClient;
@@ -155,7 +157,13 @@ class EndToEndDemoIT {
                         market, new Random(42), "INV");
 
                 // rando decides autonomously and submits over OFX; with an empty book it rests.
-                Optional<SubmittedOrder> submitted = agent.step("ACME", PortfolioView.empty());
+                // Real holdings, not PortfolioView.empty(): this is what the agent loops now pass,
+                // so the end-to-end path exercises the statement read too.
+                PortfolioCache portfolio =
+                        new PortfolioCache(ofx::fetchPortfolio, ACCOUNT_A, 5_000);
+                Optional<SubmittedOrder> submitted = agent.step("ACME", portfolio.current());
+                assertFalse(portfolio.current().isEmpty(),
+                        "the agent must see real holdings — a seeded account has cash and shares");
                 assertTrue(submitted.isPresent(), "rando should submit an order given a last sale");
                 SubmittedOrder order = submitted.get();
                 assertTrue(!"REJECTED".equals(order.status()) && !"NO_RESPONSE".equals(order.status()),

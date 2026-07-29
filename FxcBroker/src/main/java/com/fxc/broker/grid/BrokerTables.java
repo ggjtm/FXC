@@ -56,16 +56,21 @@ public final class BrokerTables {
                 ) WITH "template=partitioned,backups=0"
                 """);
 
+        // account_number and ts (docs/DESIGN.md §6): a fill must be attributable to an account and
+        // placed in time on its own, since the archiver removes the CLIENT_ORDER row it would
+        // otherwise have to be joined against.
         exec(sql, """
                 CREATE TABLE IF NOT EXISTS EXECUTION (
                     exec_id          VARCHAR PRIMARY KEY,
                     client_order_id  VARCHAR NOT NULL,
+                    account_number   VARCHAR NOT NULL,
                     symbol           VARCHAR NOT NULL,
                     side             VARCHAR NOT NULL,
                     last_qty         DECIMAL(28, 8) NOT NULL,
                     last_px          DECIMAL(20, 8) NOT NULL,
                     cum_qty          DECIMAL(28, 8) NOT NULL,
-                    status           VARCHAR NOT NULL
+                    status           VARCHAR NOT NULL,
+                    ts               BIGINT NOT NULL
                 ) WITH "template=partitioned,backups=0"
                 """);
     }

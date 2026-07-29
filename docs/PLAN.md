@@ -1,14 +1,17 @@
 # FXC Implementation Plan
 
-Status: **Phases 0–6 complete; only the Phase 7 Mastodon-gateway addon remains (deferred).** All
-four components run together end to end: an autonomous FxcInvestor agent trades over OFX, the fill
-routes Broker → Exchange, is drop-copied to FxcPub, published to the broker's XMPP feed, and read
-back by the investor — proven by `scripts/demo.sh` and the `EndToEndDemoIT` orchestrator. Phase 4
-delivered the full Strategy SPI + all three agents (`rando`, `booker`, `bookfish`), OFX client,
-single-instance + opt-in **Gatling** runners, XMPP feed ingestion, MariaDB decision log, and the
-interactive **CLI REPL**. Phase 5 added shared `ColdStore` archival across all three GridGain
-components with FxcPub deep-history fallback. ~50 tests across the modules (integration tests skip
-gracefully without MariaDB/Tigase). Companion to [DESIGN.md](DESIGN.md).
+Status: **Phases 0–6 complete, plus the DESIGN §6 component consoles; only the Phase 7
+Mastodon-gateway addon remains (deferred).** All four components run together end to end: an
+autonomous FxcInvestor agent trades over OFX, the fill routes Broker → Exchange, is drop-copied to
+FxcPub, published to the broker's XMPP feed, and read back by the investor — proven by
+`scripts/demo.sh` and the `EndToEndDemoIT` orchestrator. Phase 4 delivered the full Strategy SPI +
+all three agents (`rando`, `booker`, `bookfish`), OFX client, the single-instance runner, XMPP feed ingestion, MariaDB decision log, and the interactive **CLI REPL**. Phase 5 added
+shared `ColdStore` archival across all three GridGain components with FxcPub deep-history fallback.
+The post-roadmap stories below added the FxcExchange and FxcBroker demo consoles (DESIGN §6) with the
+backend they needed — trading-session state, mass cancel, per-account P&L — and then replaced the
+Gatling harness with a Python + Locust one whose UI can re-rate a run in progress, making the demo
+continuous. **156 Java tests + 105 Python tests**, 0 failures (integration tests skip gracefully
+without MariaDB/Tigase; the Python suite needs no pip install). Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
 first (everything depends on it), then Broker, then Pub, then Investor, then archival, then the
@@ -18,19 +21,19 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
 
 - Add `fxc-common` module: the instrument model of DESIGN §3.0 (sealed `Instrument` hierarchy
   with `FxSpotInstrument` and `EquityInstrument`, `AssetClass`, `SettlementProfile`; derivatives
-  left as designed extension points per DESIGN §6.3), FIX 4.4 dictionary resource, config
+  left as designed extension points per DESIGN §7.3), FIX 4.4 dictionary resource, config
   loader, OFX private-message-set constants (empty placeholder for now).
 - Wire dependencies from the confirmed version catalog in `.reference/README.md`: QuickFIX/J
   3.0.1, GridGain 8 Ultimate Edition 8.9.35 (add the GridGain Nexus repo; the node needs a signed
   `gridgain-license.xml`, referenced from the root `gridgain.properties` — see PROBLEMS.md P5),
   OFX4J 1.39, Smack 4.4.8, MariaDB Connector/J 3.5.9, HikariCP 7.1.0. Add the JDK 21 `--add-opens`
   flags for GridGain. (Javalin is **not** wired now —
-  it belongs to the deferred Mastodon gateway, Phase 7 / DESIGN §6.2.)
+  it belongs to the deferred Mastodon gateway, Phase 7 / DESIGN §7.2.)
 - **⚠️ Tigase spike (blocking gate for FxcPub):** run **stock, unmodified** Tigase 8.4.1 as a
   docker-compose service (image `tigase/tigase-xmpp-server`) against MariaDB (load its repository
   schema via `scripts/tigase.sh install-schema`), create a pubsub node, and complete a Smack
   login + publish/subscribe round-trip **as an XMPP client**. Confirm JDK 21 and accept the
-  AGPLv3 license. No custom plugins; Tigase is external, not embedded (resolved — DESIGN §6.1,
+  AGPLv3 license. No custom plugins; Tigase is external, not embedded (resolved — DESIGN §7.1,
   PROBLEMS.md P1/P2).
 - `docker-compose.yml` with MariaDB (`mariadb:11.8`) **and Tigase** (`tigase/tigase-xmpp-server`);
   per-component `schema.sql` stubs (Tigase's own repository schema is loaded by its schema tool).
@@ -60,7 +63,7 @@ end-to-end demo. The Mastodon-compatibility gateway is a late-phase addon (Phase
 3. `AccountService`: multi-currency balances plus share positions in the unified `POSITION`
    model; simple margin check for FX, cash-up-front for equities.
 4. OFX 2.x server via OFX4J: signon, account info, investment statement (equities as native
-   stock holdings; FX positions as pseudo-securities per DESIGN §6.6).
+   stock holdings; FX positions as pseudo-securities per DESIGN §7.6).
 5. Custom OFX order-entry message set (`FXC.ORDERMSGSRQV1`) — finalize shape here.
 - **Exit criteria**: integration test drives signon → order → fill → statement shows the
   position, against a live FxcExchange, for both an FX pair and an equity.
@@ -92,8 +95,9 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
 5. [x] Strategy SPI + built-in agents (`rando`/`booker`/`bookfish`); decision loop wiring
    (market view from statements/feed → `Strategy.decide` → order via OFX). The `booker` agent is
    fed by the FxcBroker order-book relay (FxcBroker/docs/stories/001).
-6. [x] Opt-in **Gatling** multi-agent runner for performance / bulk simulation
-   (FxcInvestor/docs/stories/005).
+6. [x] Opt-in multi-agent load runner for performance / bulk simulation. Originally Gatling
+   (FxcInvestor/docs/stories/005); **replaced** by the Python + Locust harness in `loadgen/`
+   (docs/stories/006) because Gatling OSS cannot start, stop, or re-rate a run in progress.
 - **Exit criteria (met)**: `agent on` trades autonomously end-to-end and its fills appear on FxcPub.
   See FxcBroker/docs/PROBLEMS.md B9 for the signon credential-default fix found while validating
   the REPL order→fill flow.
@@ -134,7 +138,7 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
 
 ## Phase 7 — Mastodon-compatibility gateway (late-phase addon)
 
-Deferred per DESIGN §6.2. A **separate** service that lets stock Mastodon clients read/post
+Deferred per DESIGN §7.2. A **separate** service that lets stock Mastodon clients read/post
 against FxcPub, without touching stock Tigase.
 
 1. Embedded HTTP server (Javalin — wired here, not in Phase 0) exposing the Mastodon REST subset:
@@ -158,6 +162,56 @@ Feature stories layered on the completed components, tracked in each component's
   `http://localhost:8090/`. New package `com.fxc.exchange.feed`; a `ts` column was added to `TRADE`
   / `TRADE_ARCHIVE`. Verified by `CandleAggregatorTest`, `WebSocketFeedServerTest`,
   `FeedHttpServerIntegrationTest`, `FeedUiServingTest`, `MarketDataDepthTest`.
+
+- **fxc-common — Shared web toolkit (`docs/stories/001`) — DONE.** Everything the component consoles
+  have in common, in `com.fxc.common.web` and served off the classpath: `Json` (promoted from
+  `com.fxc.exchange.feed`), `HttpJson` (responses, CORS/preflight, method **and exact-path** gating),
+  `StaticAssets` (classpath serving with a MIME map, traversal allowlist and `ETag`/304), plus
+  `web/common/` — the dark theme, the hover menu, the D3 status indicator, the fetch/poll/socket
+  helpers, and a **vendored** `d3.v7.min.js`. No new Gradle dependencies. Verified by
+  `StaticAssetsTest`, `JsonTest`.
+
+- **FxcExchange — Controller/monitor console (`docs/stories/002`) — DONE.** Root DESIGN §6.2. Adds the
+  exchange's first market-state primitive (`TradingSession`: market-wide + per-symbol halt, combined
+  to the safer state), mass cancel (`OrderBook.cancelAll` / `MatchingEngine.clearBook`) that reports
+  every cancellation to its owning broker over FIX via `CancelReporter`, and
+  `ExchangeControlService` behind `GET /api/status|book` + `POST /api/session/halt|open`,
+  `/api/book/clear` (query-parameter POSTs — still no JSON parser). The chart is rewritten in D3+SVG,
+  which fixed sparse candle buckets rendering with compressed time gaps; the live ticker gained a
+  heartbeat and a real `pong`. Controls are gated by `feed.controls.enabled`. Verified by
+  `TradingSessionTest`, `MatchingEngineHaltTest`, `ExchangeControlApiTest`, `WebSocketFeedServerTest`,
+  `FeedUiServingTest`.
+
+- **FxcBroker — Monitor/controller console (`docs/stories/002`) — DONE.** Root DESIGN §6.3. Adds the
+  repo's first P&L (`PnlService` + `FxRates`: session-relative mark-to-market equity in USD, sampled
+  per fill, `realized + unrealized == relative`), an operator start/stop-trading gate on `OmsService`,
+  the accessors the console needs (`AccountService.accounts()`, `MarketDataCache.lastPrices()`,
+  `BrokerFixClient.isLoggedOn()`), and `account_number` + `ts` on `EXECUTION`/`EXECUTION_ARCHIVE`
+  (cold schema v2) — without which a fill could not be attributed to an account at all. Served by a
+  **separate** HTTP server on 8083 so the OFX endpoint stays POST-only. Verified by `FxRatesTest`,
+  `PnlServiceTest`, `BrokerWebApiTest`.
+
+  **Front-end caveat for all three:** the console JavaScript is covered by served-asset assertions, a
+  replayed-payload geometry check and a structural scan, but has **never been executed** — no browser
+  or JS engine was available in the build environment. Open both consoles and look at them before
+  demoing.
+
+- **FxcInvestor — Locust load harness (`docs/stories/006`) — DONE.** Root DESIGN §6.5. Replaced the
+  Gatling harness (story 005, now removed) because Gatling OSS freezes every `sim.*` knob in a static
+  initializer and cannot start, stop, or re-rate a run in progress — verified in the plugin bytecode.
+  New standalone `loadgen/` (Python + Locust, **not** a Gradle module, so `./gradlew build` is
+  unaffected), containerised per the Tigase precedent, with a live control UI on `:8089`. Speaks OFX 2.x
+  without OFX4J, guarded by **golden fixtures** in `FxcInvestor/sample_data/` that are generated from
+  OFX4J and asserted byte-identical from both languages — necessary because every way of getting the
+  wire format wrong returns HTTP 200. Brought two Java changes with it: `agent/PortfolioCache` (both
+  agent loops had been passing `PortfolioView.empty()`, so no strategy could see its own holdings) and
+  `strategy/LiquidityAwareStrategy`, which scales `booker`/`bookfish` buying to available cash and sells
+  to maintain a cash floor — the thing that lets a continuous run avoid exhausting an account. Also
+  `ofx.http.threads` on the broker, whose OFX pool was a hardcoded 4 and is the throughput ceiling.
+  `scripts/demo.sh` is now continuous by default (`--batch` for the bounded run); `scripts/loadtest.sh`
+  is the host-virtualenv path. Verified by `OfxGoldenEnvelopeTest`, `PortfolioCacheTest`,
+  `LiquidityAwareStrategyTest`, 105 Python `unittest` tests, and a continuous run of **2,168 fills with
+  zero rejections** and equity mean-reverting rather than draining.
 
 ## Suggested review checkpoints
 

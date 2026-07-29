@@ -1,9 +1,17 @@
 # Multi-agent Gatling runner (performance & bulk simulation)
 
-Status: implemented (Gatling 3.13.5 Java DSL; `gatling` source set + `gatlingRun` task)
+Status: **SUPERSEDED by [006](006-locust-multi-agent-runner.md) — implemented, then removed.**
 Relates to: [004](004-single-instance-runner.md); root PLAN Phase 6 (demo/hardening)
 
-## How to run
+> **Retired.** This harness was built and worked, but it could not satisfy the requirement that
+> followed it: steering the workload from a browser while a run is in progress. Gatling OSS reads every
+> `sim.*` knob in a static initializer, so a run is frozen when its JVM starts, and its report is a
+> post-run batch step; a live control console exists only in commercial Gatling Enterprise. The `gatling`
+> source set, the `io.gatling.gradle` plugin, and the `gatlingRun` task are **gone** — the commands and
+> knobs below no longer exist. Kept as the record of why, superseded by the Locust harness in
+> [006](006-locust-multi-agent-runner.md). Everything from here down describes the removed code.
+
+## How to run (removed — `gatlingRun` no longer exists)
 
 Against a running broker (and exchange):
 

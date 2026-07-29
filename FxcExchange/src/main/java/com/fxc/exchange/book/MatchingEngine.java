@@ -1,6 +1,7 @@
 package com.fxc.exchange.book;
 
 import com.fxc.common.instrument.Instrument;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +24,21 @@ public final class MatchingEngine {
     private final Map<String, OrderBook> books = new ConcurrentHashMap<>();
     private final Map<String, Order> orders = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
+    private final TradingSession session;
+
+    /** An engine with its own trading session, open for business. */
+    public MatchingEngine() {
+        this(new TradingSession());
+    }
+
+    /** An engine sharing an externally-controlled session (the console's halt/resume switch). */
+    public MatchingEngine(TradingSession session) {
+        this.session = session;
+    }
+
+    public TradingSession session() {
+        return session;
+    }
 
     /** List an instrument, creating its (empty) book. Idempotent per symbol. */
     public void list(Instrument instrument) {
@@ -32,6 +48,15 @@ public final class MatchingEngine {
     }
 
     public synchronized MatchResult submit(NewOrder req) {
+        // Checked before anything else: a halted market rejects every order, including ones that
+        // would otherwise fail validation, so "halted" is never masked by another reason.
+        if (session.isHalted(req.symbol())) {
+            Order rejected = newOrder(req);
+            rejected.markRejected();
+            orders.put(rejected.orderId(), rejected);
+            return MatchResult.rejected(rejected, "trading halted: " + req.symbol());
+        }
+
         Instrument instrument = instruments.get(req.symbol());
         if (instrument == null) {
             Order rejected = newOrder(req);
@@ -54,12 +79,35 @@ public final class MatchingEngine {
         return MatchResult.accepted(order, trades);
     }
 
+    /**
+     * Cancel a resting order. Permitted while trading is halted — an operator halt must not trap
+     * brokers' orders in the book, which is standard market behaviour.
+     */
     public synchronized Optional<Order> cancel(String orderId) {
         OrderBook book = bookForOrder(orderId);
         if (book == null) {
             return Optional.empty();
         }
         return book.cancel(orderId);
+    }
+
+    /**
+     * Cancel every resting order for one symbol ("clear the order book", docs/DESIGN.md §6).
+     *
+     * @return the cancelled orders, so the caller can report each one to its owning broker
+     */
+    public synchronized List<Order> clearBook(String symbol) {
+        OrderBook book = books.get(symbol);
+        return book == null ? List.of() : book.cancelAll();
+    }
+
+    /** Cancel every resting order across all books. */
+    public synchronized List<Order> clearAll() {
+        List<Order> cancelled = new ArrayList<>();
+        for (OrderBook book : books.values()) {
+            cancelled.addAll(book.cancelAll());
+        }
+        return cancelled;
     }
 
     public Optional<Instrument> instrument(String symbol) {

@@ -9,4 +9,13 @@ out/
 .mcp.json
 .reference/
 .sdkmanrc
+.java
 gridgain-license.xml
+
+# Python load harness (loadgen/). Reports go under build/, already ignored above.
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

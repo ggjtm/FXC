@@ -47,8 +47,9 @@ class BrokerArchiveIntegrationTest {
                 // Two terminal orders (FILLED + CANCELLED) with executions, plus one live (ROUTED) order
                 // that must NOT be archived.
                 repo.upsertOrder(terminal("CO-1", OrderStatus.FILLED, "10", "42.10"));
-                repo.insertExecution(new Execution("EX-1", "CO-1", "ACME", Side.BUY,
-                        new BigDecimal("10"), new BigDecimal("42.10"), new BigDecimal("10"), OrderStatus.FILLED));
+                repo.insertExecution(new Execution("EX-1", "CO-1", "000123456", "ACME", Side.BUY,
+                        new BigDecimal("10"), new BigDecimal("42.10"), new BigDecimal("10"),
+                        OrderStatus.FILLED, 1_000L));
                 repo.upsertOrder(terminal("CO-2", OrderStatus.CANCELLED, "5", "41.00"));
                 repo.upsertOrder(open("CO-3"));
 

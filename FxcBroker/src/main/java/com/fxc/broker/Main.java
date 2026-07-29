@@ -53,12 +53,24 @@ public final class Main {
         BigDecimal seedShares = new BigDecimal(config.getString("account.seedShares", "1000"));
         BigDecimal seedSharePrice = new BigDecimal(config.getString("account.seedSharePrice", "42.00"));
 
+        // Monitor/controller console (FxcBroker/docs/stories/002).
+        boolean webEnabled = config.getBoolean("web.enabled", true);
+        int webPort = webEnabled ? config.getInt("web.http.port", 8083) : -1;
+        boolean webControls = config.getBoolean("web.controls.enabled", true);
+        // The ceiling on OFX throughput. Four is plenty for the demo's own agents; the Locust harness
+        // can outrun it, so it is configurable rather than baked in.
+        int ofxThreads = config.getInt("ofx.http.threads",
+                com.fxc.broker.ofx.OfxHttpServer.DEFAULT_THREADS);
+
         // Cold-data archival to MariaDB (best-effort — runs without it if the DB is unreachable).
         ColdStore coldStore = openColdStore(config);
         long archiveIntervalMs = config.getInt("archive.intervalMs", 30_000);
 
         System.out.println("FxcBroker starting (grid='" + gridInstance + "', exchange="
                 + exchangeHost + ":" + exchangePort + " as " + senderCompId + ", OFX :" + ofxPort
+                + ", OFX threads " + ofxThreads
+                + ", console " + (webEnabled ? ":" + webPort
+                        + " controls " + (webControls ? "on" : "off") : "off")
                 + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off") + ")...");
 
         BrokerServer server = BrokerServer.start(
@@ -75,7 +87,7 @@ public final class Main {
                 dropCopyEnabled
                         ? FixSettingsFactory.initiator(pubHost, pubPort, senderCompId, "FXCPUB")
                         : null,
-                coldStore, archiveIntervalMs);
+                coldStore, archiveIntervalMs, webPort, webControls, ofxThreads);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -85,7 +97,9 @@ public final class Main {
         }));
         System.out.println("FxcBroker started. OFX on port " + server.ofxPort()
                 + ", accounts " + devAccount + "/" + devAccount2 + " seeded (cash + " + seedSymbol
-                + " shares). Ctrl-C to stop.");
+                + " shares)."
+                + (webEnabled ? " Console: http://localhost:" + server.webServer().boundPort() + "/" : "")
+                + " Ctrl-C to stop.");
         shutdown.await();
     }
 

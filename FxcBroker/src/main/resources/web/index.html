@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FxcBroker — Console</title>
+<link rel="stylesheet" href="/common/fxc.css">
+<style>
+  /* Broker-specific layout only; everything shared lives in /common/fxc.css. */
+  #notice { display: none; padding: 6px 14px; font-size: 12px; color: var(--status-warn); }
+  #notice.is-shown { display: block; }
+</style>
+</head>
+<body>
+
+  <header class="fxc-header">
+    <div class="fxc-brand">FxcBroker<span class="fxc-sub">Broker Console</span></div>
+
+    <div class="fxc-menu" id="controls">
+      <button class="fxc-menu-btn" type="button" aria-haspopup="menu">Controls ▾</button>
+      <div class="fxc-menu-panel" role="menu">
+        <div class="fxc-menu-label">Trading</div>
+        <button class="fxc-menu-item" role="menuitem" type="button" data-action="stop"
+                data-danger data-confirm-label="Click again to stop trading">Stop trading</button>
+        <button class="fxc-menu-item" role="menuitem" type="button" data-action="start">Start trading</button>
+      </div>
+    </div>
+
+    <div class="fxc-status" id="status"></div>
+  </header>
+
+  <div class="fxc-banner" id="banner"></div>
+
+  <!-- Last-sale ticker from the exchange feed, at the top of the pane (§6). -->
+  <div class="fxc-ticker" id="ticker"></div>
+
+  <main class="fxc-main">
+    <div class="fxc-plot" id="plot">
+      <svg id="chart" role="img" aria-labelledby="chartTitle">
+        <title id="chartTitle">Account profit and loss against trade count</title>
+      </svg>
+    </div>
+    <div class="fxc-empty" id="empty">No trades yet this session.</div>
+    <div class="fxc-tooltip" id="tooltip"></div>
+    <div id="notice"></div>
+    <div class="fxc-legend" id="legend"></div>
+    <!-- The table view: every plotted value in text, not gated behind a hover. -->
+    <div class="fxc-table-wrap">
+      <table class="fxc-table">
+        <thead>
+          <tr>
+            <th scope="col">Account</th>
+            <th scope="col">Trades</th>
+            <th scope="col">Realized</th>
+            <th scope="col">Unrealized</th>
+            <th scope="col">Relative P&amp;L</th>
+            <th scope="col">Equity</th>
+            <th scope="col">Baseline</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+<script src="/common/vendor/d3.v7.min.js"></script>
+<script src="/common/fxc-api.js"></script>
+<script src="/common/fxc-menu.js"></script>
+<script src="/common/fxc-status.js"></script>
+<script src="/assets/broker.js"></script>
+</body>
+</html>

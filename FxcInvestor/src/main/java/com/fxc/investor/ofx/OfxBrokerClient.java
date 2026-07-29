@@ -81,8 +81,15 @@ public final class OfxBrokerClient {
     }
 
     /**
-     * Build the marshalled OFX order-request bytes without sending them. Used by the Gatling
-     * simulation, which drives the HTTP itself while reusing this production request-building.
+     * Build the marshalled OFX order-request bytes without sending them.
+     *
+     * <p>This is the Java side of a cross-language wire contract: {@code OfxGoldenEnvelopeTest} calls
+     * it to generate and guard the fixtures in {@code sample_data/}, and the Python load harness
+     * ({@code loadgen/}) is tested against those same fixtures. Keeping one authoritative OFX4J
+     * marshaller here is what stops the two implementations drifting — every way of getting the
+     * format wrong returns HTTP 200 from the broker, so drift would otherwise be silent.
+     *
+     * <p>(It previously existed for the retired Gatling simulation, which drove the HTTP itself.)
      */
     public byte[] marshalOrder(String account, String clOrdId, String symbol, Side side,
                                BigDecimal price, BigDecimal quantity) {

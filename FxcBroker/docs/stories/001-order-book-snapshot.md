@@ -24,7 +24,7 @@ OFX/XMPP investor cannot otherwise see (FxcInvestor **I5**).
 
 1. **Investor → Broker (OFX):** a market-data request for a symbol (depth N), carried in a **custom
    OFX message set** (OFX has no native book/quote messages — mirror the order-entry approach in
-   DESIGN §6.4, e.g. `@Aggregate("FXCMDMSGSRQV1")` with a `FXCMDRQ` carrying `SECID` + depth).
+   DESIGN §7.4, e.g. `@Aggregate("FXCMDMSGSRQV1")` with a `FXCMDRQ` carrying `SECID` + depth).
 2. **Broker → Exchange (FIX):** the broker issues a `MarketDataRequest(35=V)` (snapshot type, or
    reuses a standing `SNAPSHOT_PLUS_UPDATES` subscription it maintains + caches) for the symbol; the
    exchange replies with `MarketDataSnapshotFullRefresh(35=W)` (bids/asks: `MDEntryType`,

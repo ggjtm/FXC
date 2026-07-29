@@ -27,7 +27,7 @@ than uniformly:
   - the simulation/runner supplies a market-data feed (e.g. a FIX `MarketDataRequest` subscription
     to FxcExchange) into the agent's `MarketView`; **or**
   - a future broker-side OFX quote/book extension exposes top-N depth.
-  For the Gatling simulation runner ([005](005-gatling-multi-agent-runner.md)), the harness provides
+  For the Locust load harness ([006](006-locust-multi-agent-runner.md)), the harness provides
   the book snapshot.
 
 ## Acceptance criteria

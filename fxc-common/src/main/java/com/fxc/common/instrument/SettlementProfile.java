@@ -34,6 +34,6 @@ public record SettlementProfile(SettlementStyle style, int settlementLagDays) {
         CURRENCY_EXCHANGE,
         /** A share position moves against a cash balance (equities). */
         DELIVERY_VERSUS_PAYMENT;
-        // ToDo (docs/DESIGN.md §6.3): margining / mark-to-market styles for derivatives
+        // ToDo (docs/DESIGN.md §7.3): margining / mark-to-market styles for derivatives
     }
 }

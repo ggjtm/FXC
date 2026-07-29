@@ -41,13 +41,17 @@ public final class Main {
         boolean feedEnabled = config.getBoolean("feed.enabled", true);
         int feedHttpPort = feedEnabled ? config.getInt("feed.http.port", 8090) : -1;
         int feedWsPort = config.getInt("feed.ws.port", 8091);
+        // Console controls (stories/002): halt/resume trading, clear the order book. Unauthenticated
+        // by design for the demo — set feed.controls.enabled=false to serve a read-only console.
+        boolean feedControls = config.getBoolean("feed.controls.enabled", true);
 
         System.out.println("FxcExchange starting (GridGain='" + instanceName + "', FIX acceptor from cfg"
                 + ", archival " + (coldStore != null ? "every " + archiveIntervalMs + "ms" : "off")
-                + ", feed " + (feedEnabled ? "http :" + feedHttpPort + " ws :" + feedWsPort : "off") + ")...");
+                + ", feed " + (feedEnabled ? "http :" + feedHttpPort + " ws :" + feedWsPort : "off")
+                + ", controls " + (feedEnabled && feedControls ? "on" : "off") + ")...");
         ExchangeServer server = ExchangeServer.start(
                 settings, instanceName, discoveryPort, workDir, InstrumentCatalog.defaults(),
-                coldStore, archiveIntervalMs, feedHttpPort, feedWsPort);
+                coldStore, archiveIntervalMs, feedHttpPort, feedWsPort, feedControls);
 
         CountDownLatch shutdown = new CountDownLatch(1);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -57,7 +61,7 @@ public final class Main {
         }));
         System.out.println("FxcExchange started. " + InstrumentCatalog.defaults().size()
                 + " instruments listed."
-                + (feedEnabled ? " Price charts: http://localhost:" + server.feedService().httpPort() + "/" : "")
+                + (feedEnabled ? " Console: http://localhost:" + server.feedService().httpPort() + "/" : "")
                 + " Ctrl-C to stop.");
         shutdown.await();
     }

@@ -31,7 +31,8 @@ Agent strategies and runners are specified as stories in [stories/](stories/):
 - [002 — `booker`](stories/002-booker-agent.md): price target from a quantity-weighted **order-book** histogram, ≤1σ from last sale. **(implemented)**
 - [003 — `bookfish`](stories/003-bookfish-agent.md): price target from a **traded-volume** histogram, ≤0.5σ from last sale. **(implemented)**
 - [004 — single-instance runner](stories/004-single-instance-runner.md): run one agent (OFX + live XMPP feed) with a selectable strategy. **(in progress — feed wired; CLI REPL pending)**
-- [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): opt-in Gatling harness for perf testing + bulk simulation. **(implemented — `./gradlew :FxcInvestor:gatlingRun`)**
+- [005 — Gatling multi-agent runner](stories/005-gatling-multi-agent-runner.md): **superseded by 006 and removed.** Gatling could not start, stop, or re-rate a run in progress.
+- [006 — Locust multi-agent runner](stories/006-locust-multi-agent-runner.md): Python + Locust load harness in `loadgen/` with a live control UI on :8089. **(implemented — `scripts/demo.sh` or `scripts/loadtest.sh`)** Brought with it `PortfolioCache` (both agent loops previously passed `PortfolioView.empty()`) and `LiquidityAwareStrategy`, which makes `booker`/`bookfish` sustainable indefinitely.
 
 **Note (booker data source):** `booker`'s order-book histogram needs live book depth, which the
 plain OFX/XMPP investor doesn't see — it falls back to `rando` behavior until fed a book snapshot

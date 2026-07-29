@@ -18,4 +18,6 @@ Relates to: PLAN item / DESIGN §
 - [002 — booker agent](002-booker-agent.md)
 - [003 — bookfish agent](003-bookfish-agent.md)
 - [004 — single-instance runner](004-single-instance-runner.md)
-- [005 — Gatling multi-agent runner](005-gatling-multi-agent-runner.md)
+- [005 — Gatling multi-agent runner](005-gatling-multi-agent-runner.md) — **superseded by 006**
+- [006 — Locust multi-agent runner](006-locust-multi-agent-runner.md): Python + Locust load harness
+  with a live control UI on :8089; replaces Gatling, which could not re-rate a run in progress

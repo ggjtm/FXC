@@ -1,44 +1,84 @@
 package com.fxc.exchange.feed;
 
+import com.fxc.common.web.HttpJson;
+import com.fxc.common.web.Json;
+import com.fxc.common.web.StaticAssets;
+import com.fxc.exchange.book.OrderBook;
+import com.fxc.exchange.control.ExchangeControlService;
+import com.fxc.exchange.control.ExchangeControlService.BookSnapshot;
+import com.fxc.exchange.control.ExchangeControlService.ControlResult;
+import com.fxc.exchange.control.ExchangeControlService.ExchangeStatus;
+import com.fxc.exchange.control.ExchangeControlService.SymbolStatus;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.InetSocketAddress;
-import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executors;
 
 /**
- * The exchange's REST + web-UI transport (FxcExchange/docs/stories/001). Uses the JDK's built-in
- * {@link HttpServer} — no web framework, matching {@code FxcBroker}'s OFX server. Serves:
+ * The exchange's REST + web-console transport (FxcExchange/docs/stories/001 and 002). Uses the JDK's
+ * built-in {@link HttpServer} — no web framework, matching {@code FxcBroker}'s OFX server. Serves:
  *
  * <ul>
- *   <li>{@code GET /api/symbols} — traded symbols;</li>
+ *   <li>{@code GET /api/symbols} — listed symbols;</li>
  *   <li>{@code GET /api/candles?symbol&start&end&granularity} — OHLCV candles + volume-by-price for
  *       the window, with the granularity actually applied (age-based floors);</li>
- *   <li>{@code GET /api/config} — the live-feed WebSocket port;</li>
- *   <li>{@code GET /} — the self-contained charting UI (classpath {@code web/index.html}).</li>
+ *   <li>{@code GET /api/config} — the live-feed WebSocket port and whether controls are enabled;</li>
+ *   <li>{@code GET /api/status} — market state, per-symbol quotes/depth, feed throughput;</li>
+ *   <li>{@code GET /api/book?symbol&depth} — aggregated book depth;</li>
+ *   <li>{@code POST /api/session/halt|open?symbol} — halt/resume trading (market-wide, or one symbol);</li>
+ *   <li>{@code POST /api/book/clear?symbol} — mass-cancel resting orders;</li>
+ *   <li>{@code GET /}, {@code /assets/*}, {@code /common/*} — the console and its assets.</li>
  * </ul>
+ *
+ * <p>Control endpoints are {@code POST} with query parameters and an empty body, deliberately: FXC
+ * has no JSON parser and does not need one for this surface (see {@link Json}). They are
+ * unauthenticated, which is why they sit behind a config switch — see docs/DESIGN.md §7.
  */
 public final class FeedHttpServer implements AutoCloseable {
 
     private final HttpServer server;
     private final CandleService candles;
     private final int wsPort;
+    private final ExchangeControlService control; // nullable
+    private final boolean controlsEnabled;
 
     public FeedHttpServer(String host, int port, CandleService candles, int wsPort) throws IOException {
+        this(host, port, candles, wsPort, null, false);
+    }
+
+    /**
+     * @param control         the control/status service, or {@code null} to serve history only
+     * @param controlsEnabled when false, the mutating {@code POST} endpoints are not registered
+     */
+    public FeedHttpServer(String host, int port, CandleService candles, int wsPort,
+                          ExchangeControlService control, boolean controlsEnabled) throws IOException {
         this.candles = candles;
         this.wsPort = wsPort;
+        this.control = control;
+        this.controlsEnabled = control != null && controlsEnabled;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.server.setExecutor(Executors.newFixedThreadPool(4));
         server.createContext("/api/symbols", this::handleSymbols);
         server.createContext("/api/candles", this::handleCandles);
         server.createContext("/api/config", this::handleConfig);
-        server.createContext("/", this::handleUi);
+        if (control != null) {
+            server.createContext("/api/status", this::handleStatus);
+            server.createContext("/api/book", this::handleBook);
+        }
+        if (this.controlsEnabled) {
+            server.createContext("/api/session/halt", ex -> handleSession(ex, true));
+            server.createContext("/api/session/open", ex -> handleSession(ex, false));
+            server.createContext("/api/book/clear", this::handleClearBook);
+        }
+        // Catch-all: the console page plus its own and the shared fxc-common assets.
+        server.createContext("/", new StaticAssets("web/index.html")
+                .mount("/assets/", "web/assets/")
+                .mount("/common/", "web/common/"));
     }
 
     public void start() {
@@ -54,58 +94,93 @@ public final class FeedHttpServer implements AutoCloseable {
         server.stop(0);
     }
 
-    // --- handlers ---
+    // --- history handlers ---
 
     private void handleSymbols(HttpExchange ex) throws IOException {
-        if (notGet(ex)) {
+        if (HttpJson.requireExactPath(ex, "/api/symbols") || HttpJson.requireMethod(ex, "GET")) {
             return;
         }
-        String json = Json.array(candles.symbols(), Json::str);
-        sendJson(ex, 200, json);
+        HttpJson.sendJson(ex, 200, Json.array(candles.symbols(), Json::str));
     }
 
     private void handleConfig(HttpExchange ex) throws IOException {
-        if (notGet(ex)) {
+        if (HttpJson.requireExactPath(ex, "/api/config") || HttpJson.requireMethod(ex, "GET")) {
             return;
         }
-        sendJson(ex, 200, "{\"wsPort\":" + wsPort + "}");
+        HttpJson.sendJson(ex, 200, "{\"wsPort\":" + wsPort
+                + ",\"controlsEnabled\":" + controlsEnabled + "}");
     }
 
     private void handleCandles(HttpExchange ex) throws IOException {
-        if (notGet(ex)) {
+        if (HttpJson.requireExactPath(ex, "/api/candles") || HttpJson.requireMethod(ex, "GET")) {
             return;
         }
-        Map<String, String> q = query(ex.getRequestURI());
-        String symbol = q.get("symbol");
-        if (symbol == null || symbol.isBlank()) {
-            sendJson(ex, 400, "{\"error\":\"symbol required\"}");
+        Map<String, String> q = HttpJson.query(ex.getRequestURI());
+        String symbol = HttpJson.optional(q, "symbol");
+        if (symbol == null) {
+            HttpJson.sendError(ex, 400, "symbol required");
             return;
         }
         long now = System.currentTimeMillis();
-        long end = parseLong(q.get("end"), now);
-        long start = parseLong(q.get("start"), end - Granularities.DAY_MS);
-        long gran = q.containsKey("granularity")
-                ? Granularities.parse(q.get("granularity")) : Granularities.MINUTE_MS;
+        long end = HttpJson.parseLong(q.get("end"), now);
+        long start = HttpJson.parseLong(q.get("start"), end - Granularities.DAY_MS);
+        long gran;
+        try {
+            gran = q.containsKey("granularity")
+                    ? Granularities.parse(q.get("granularity")) : Granularities.MINUTE_MS;
+        } catch (IllegalArgumentException e) {
+            // An unusable granularity token is a bad request, not a server fault.
+            HttpJson.sendError(ex, 400, "invalid granularity: " + q.get("granularity"));
+            return;
+        }
 
-        CandleResponse resp = candles.candles(symbol, start, end, gran);
-        sendJson(ex, 200, candleJson(resp));
+        HttpJson.sendJson(ex, 200, candleJson(candles.candles(symbol, start, end, gran)));
     }
 
-    private void handleUi(HttpExchange ex) throws IOException {
-        if (notGet(ex)) {
+    // --- status / control handlers ---
+
+    private void handleStatus(HttpExchange ex) throws IOException {
+        if (HttpJson.requireExactPath(ex, "/api/status") || HttpJson.requireMethod(ex, "GET")) {
             return;
         }
-        String path = ex.getRequestURI().getPath();
-        if (!path.equals("/") && !path.equals("/index.html")) {
-            send(ex, 404, "text/plain", "not found".getBytes(StandardCharsets.UTF_8));
+        HttpJson.sendJson(ex, 200, statusJson(control.status()));
+    }
+
+    private void handleBook(HttpExchange ex) throws IOException {
+        // Exact-path first: /api/book/clear must not be absorbed by this GET-only prefix.
+        if (HttpJson.requireExactPath(ex, "/api/book") || HttpJson.requireMethod(ex, "GET")) {
             return;
         }
-        byte[] page = readResource("web/index.html");
-        if (page == null) {
-            send(ex, 500, "text/plain", "UI resource missing".getBytes(StandardCharsets.UTF_8));
+        Map<String, String> q = HttpJson.query(ex.getRequestURI());
+        String symbol = HttpJson.optional(q, "symbol");
+        if (symbol == null) {
+            HttpJson.sendError(ex, 400, "symbol required");
             return;
         }
-        send(ex, 200, "text/html; charset=utf-8", page);
+        Optional<BookSnapshot> book = control.book(symbol, HttpJson.parseInt(q.get("depth"), 10));
+        if (book.isEmpty()) {
+            HttpJson.sendError(ex, 404, "unknown symbol: " + symbol);
+            return;
+        }
+        HttpJson.sendJson(ex, 200, bookJson(book.get()));
+    }
+
+    private void handleSession(HttpExchange ex, boolean halt) throws IOException {
+        String path = "/api/session/" + (halt ? "halt" : "open");
+        if (HttpJson.requireExactPath(ex, path) || HttpJson.requireMethod(ex, "POST")) {
+            return;
+        }
+        String symbol = HttpJson.optional(HttpJson.query(ex.getRequestURI()), "symbol");
+        ControlResult result = halt ? control.halt(symbol) : control.open(symbol);
+        HttpJson.sendJson(ex, 200, controlJson(result));
+    }
+
+    private void handleClearBook(HttpExchange ex) throws IOException {
+        if (HttpJson.requireExactPath(ex, "/api/book/clear") || HttpJson.requireMethod(ex, "POST")) {
+            return;
+        }
+        String symbol = HttpJson.optional(HttpJson.query(ex.getRequestURI()), "symbol");
+        HttpJson.sendJson(ex, 200, controlJson(control.clearBook(symbol)));
     }
 
     // --- JSON rendering ---
@@ -128,61 +203,42 @@ public final class FeedHttpServer implements AutoCloseable {
                 + ",\"volumeByPrice\":" + byPriceArr + "}";
     }
 
-    // --- helpers ---
-
-    private static boolean notGet(HttpExchange ex) throws IOException {
-        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
-            send(ex, 405, "text/plain", "method not allowed".getBytes(StandardCharsets.UTF_8));
-            return true;
-        }
-        return false;
+    static String statusJson(ExchangeStatus s) {
+        return "{\"marketState\":" + Json.str(s.marketState().name())
+                + ",\"uptimeMs\":" + s.uptimeMs()
+                + ",\"wsClients\":" + s.wsClients()
+                + ",\"tradesPerSec\":" + round2(s.tradesPerSec())
+                + ",\"totalTrades\":" + s.totalTrades()
+                + ",\"symbols\":" + Json.array(s.symbols(), FeedHttpServer::symbolStatusJson) + "}";
     }
 
-    private static Map<String, String> query(URI uri) {
-        Map<String, String> out = new HashMap<>();
-        String raw = uri.getRawQuery();
-        if (raw == null) {
-            return out;
-        }
-        for (String kv : raw.split("&")) {
-            int eq = kv.indexOf('=');
-            if (eq > 0) {
-                out.put(kv.substring(0, eq),
-                        java.net.URLDecoder.decode(kv.substring(eq + 1), StandardCharsets.UTF_8));
-            }
-        }
-        return out;
+    private static String symbolStatusJson(SymbolStatus s) {
+        return "{\"symbol\":" + Json.str(s.symbol())
+                + ",\"state\":" + Json.str(s.state().name())
+                + ",\"bestBid\":" + Json.num(s.bestBid())
+                + ",\"bestAsk\":" + Json.num(s.bestAsk())
+                + ",\"lastPrice\":" + Json.num(s.lastPrice())
+                + ",\"restingOrders\":" + s.restingOrders() + "}";
     }
 
-    private static long parseLong(String s, long dflt) {
-        if (s == null || s.isBlank()) {
-            return dflt;
-        }
-        try {
-            return Long.parseLong(s.trim());
-        } catch (NumberFormatException e) {
-            return dflt;
-        }
+    static String bookJson(BookSnapshot b) {
+        return "{\"symbol\":" + Json.str(b.symbol())
+                + ",\"bids\":" + Json.array(b.bids(), FeedHttpServer::levelJson)
+                + ",\"asks\":" + Json.array(b.asks(), FeedHttpServer::levelJson) + "}";
     }
 
-    private static void sendJson(HttpExchange ex, int status, String json) throws IOException {
-        send(ex, status, "application/json; charset=utf-8", json.getBytes(StandardCharsets.UTF_8));
+    private static String levelJson(OrderBook.Level level) {
+        return "{\"price\":" + Json.num(level.price()) + ",\"size\":" + Json.num(level.quantity()) + "}";
     }
 
-    private static void send(HttpExchange ex, int status, String contentType, byte[] body) throws IOException {
-        ex.getResponseHeaders().set("Content-Type", contentType);
-        ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
-        ex.sendResponseHeaders(status, body.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            os.write(body);
-        }
+    static String controlJson(ControlResult r) {
+        return "{\"marketState\":" + Json.str(r.marketState().name())
+                + ",\"symbol\":" + (r.symbol() == null ? "null" : Json.str(r.symbol()))
+                + ",\"cancelled\":" + r.cancelled() + "}";
     }
 
-    private static byte[] readResource(String name) {
-        try (InputStream in = FeedHttpServer.class.getClassLoader().getResourceAsStream(name)) {
-            return in == null ? null : in.readAllBytes();
-        } catch (IOException e) {
-            return null;
-        }
+    /** Two decimals, without exponent form — the rate is display-only. */
+    private static String round2(double v) {
+        return BigDecimal.valueOf(v).setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 }

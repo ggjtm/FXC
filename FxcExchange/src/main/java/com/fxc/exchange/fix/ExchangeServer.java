@@ -4,6 +4,8 @@ import com.fxc.common.instrument.Instrument;
 import com.fxc.common.store.ColdStore;
 import com.fxc.exchange.archive.ArchiveService;
 import com.fxc.exchange.book.MatchingEngine;
+import com.fxc.exchange.book.TradingSession;
+import com.fxc.exchange.control.ExchangeControlService;
 import com.fxc.exchange.feed.FeedService;
 import com.fxc.exchange.grid.ExchangeRepository;
 import com.fxc.exchange.grid.ExchangeTables;
@@ -38,11 +40,13 @@ public final class ExchangeServer implements AutoCloseable {
     private final ScheduledExecutorService archiveScheduler; // nullable
     private final ColdStore coldStore;                   // nullable
     private final FeedService feedService;               // nullable
+    private final ExchangeControlService controlService;
 
     private ExchangeServer(GridNode node, MatchingEngineService matchingService,
                            ClearingService clearingService, Acceptor acceptor,
                            ArchiveService archiveService, ScheduledExecutorService archiveScheduler,
-                           ColdStore coldStore, FeedService feedService) {
+                           ColdStore coldStore, FeedService feedService,
+                           ExchangeControlService controlService) {
         this.node = node;
         this.matchingService = matchingService;
         this.clearingService = clearingService;
@@ -51,6 +55,7 @@ public final class ExchangeServer implements AutoCloseable {
         this.archiveScheduler = archiveScheduler;
         this.coldStore = coldStore;
         this.feedService = feedService;
+        this.controlService = controlService;
     }
 
     /** Start without cold-data archival. */
@@ -84,12 +89,32 @@ public final class ExchangeServer implements AutoCloseable {
                                        String workDirectory, List<Instrument> instruments,
                                        ColdStore coldStore, long archiveIntervalMs,
                                        int feedHttpPort, int feedWsPort) throws Exception {
+        return start(settings, instanceName, discoveryPort, workDirectory, instruments,
+                coldStore, archiveIntervalMs, feedHttpPort, feedWsPort, true);
+    }
+
+    /**
+     * Start, optionally with cold-data archival, the feed service, and the console's control
+     * endpoints (FxcExchange/docs/stories/002).
+     *
+     * @param feedControlsEnabled whether the console's mutating controls (halt/resume, clear book)
+     *                            are exposed over HTTP. They are unauthenticated, so this is a
+     *                            deliberate switch — see docs/DESIGN.md §7.
+     */
+    public static ExchangeServer start(SessionSettings settings, String instanceName, int discoveryPort,
+                                       String workDirectory, List<Instrument> instruments,
+                                       ColdStore coldStore, long archiveIntervalMs,
+                                       int feedHttpPort, int feedWsPort,
+                                       boolean feedControlsEnabled) throws Exception {
         GridNode node = GridNode.start(instanceName, discoveryPort, workDirectory);
         try {
             ExchangeTables.createAll(node.ignite());
             ExchangeRepository repository = new ExchangeRepository(node.ignite());
 
-            MatchingEngine engine = new MatchingEngine();
+            // The trading session is owned here so the console's controls and the matching engine
+            // share one market-state switch.
+            TradingSession session = new TradingSession();
+            MatchingEngine engine = new MatchingEngine(session);
             MatchingEngineService matchingService = new MatchingEngineService(engine, repository);
             matchingService.seed(instruments);
 
@@ -97,6 +122,11 @@ public final class ExchangeServer implements AutoCloseable {
             MarketDataService marketDataService = new MarketDataService(engine, application);
             application.setMarketDataService(marketDataService);
             matchingService.addListener(marketDataService);
+
+            // ExchangeApplication is the CancelReporter: administratively cancelled orders go back
+            // to their owning broker as FIX ExecutionReports.
+            ExchangeControlService controlService = new ExchangeControlService(
+                    matchingService, marketDataService, application, System::currentTimeMillis);
 
             ClearingService clearingService = new ClearingService(engine, repository);
             matchingService.addListener(clearingService);
@@ -129,12 +159,13 @@ public final class ExchangeServer implements AutoCloseable {
             FeedService feedService = null;
             if (feedHttpPort >= 0) {
                 feedService = FeedService.start(node.ignite(), coldStore, System::currentTimeMillis,
-                        "0.0.0.0", feedHttpPort, Math.max(feedWsPort, 0));
+                        "0.0.0.0", feedHttpPort, Math.max(feedWsPort, 0),
+                        controlService, feedControlsEnabled);
                 matchingService.addListener(feedService.liveFeed());
             }
 
             return new ExchangeServer(node, matchingService, clearingService, acceptor,
-                    archiveService, archiveScheduler, coldStore, feedService);
+                    archiveService, archiveScheduler, coldStore, feedService, controlService);
         } catch (Exception e) {
             node.close();
             throw e;
@@ -144,6 +175,11 @@ public final class ExchangeServer implements AutoCloseable {
     /** The price-data feed service, or {@code null} if the feed is disabled. */
     public FeedService feedService() {
         return feedService;
+    }
+
+    /** The console's control/status service (halt/resume, clear book, status snapshot). */
+    public ExchangeControlService controlService() {
+        return controlService;
     }
 
     public MatchingEngineService matchingService() {

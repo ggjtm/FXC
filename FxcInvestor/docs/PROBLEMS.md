@@ -29,7 +29,7 @@ stories/001): `OfxBrokerClient.requestBook` fetches depth over OFX and the runne
 
 ## I3 — Static dev credentials — **OPEN (low)**
 
-OFX signon (and the deferred Mastodon OAuth) use static dev credentials initially (root DESIGN §6.7).
+OFX signon (and the deferred Mastodon OAuth) use static dev credentials initially (root DESIGN §7.7).
 
 ## I4 — Strategy determinism for tests — **MITIGATED (by design)**
 

@@ -31,7 +31,7 @@ import java.util.function.LongSupplier;
  *
  * <p>Not thread-safe: the engine serializes access per instrument.
  * <p>ToDo: self-trade prevention (a broker crossing its own resting order) is intentionally not
- * implemented yet — see {@code docs/DESIGN.md} §6 (auth/realism).
+ * implemented yet — see {@code docs/DESIGN.md} §7.7 (auth realism).
  */
 public final class OrderBook {
 
@@ -130,7 +130,34 @@ public final class OrderBook {
         return Optional.of(order);
     }
 
+    /**
+     * Cancel every resting order, emptying both sides of the book. Partially filled orders keep
+     * their {@code cumQty} — only the open remainder is cancelled — so the caller can report an
+     * accurate final state to each owner.
+     *
+     * @return the cancelled orders, in book order (bids best-first, then asks)
+     */
+    public List<Order> cancelAll() {
+        List<Order> cancelled = new ArrayList<>(resting.size());
+        for (NavigableMap<BigDecimal, Deque<Order>> side : List.of(bids, asks)) {
+            for (Deque<Order> queue : side.values()) {
+                for (Order order : queue) {
+                    order.markCancelled();
+                    cancelled.add(order);
+                }
+            }
+            side.clear();
+        }
+        resting.clear();
+        return cancelled;
+    }
+
     // --- Market-data views ---
+
+    /** How many orders are currently resting (both sides) — a book-depth gauge for the console. */
+    public int restingCount() {
+        return resting.size();
+    }
 
     public Optional<BigDecimal> bestBid() {
         return bids.isEmpty() ? Optional.empty() : Optional.of(bids.firstKey());

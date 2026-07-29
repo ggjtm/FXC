@@ -1,19 +1,20 @@
 # FXC System Design
 
-Status: **implemented through Phase 6** (all four components, cold-data archival, and the
-end-to-end demo are built and tested; see [PLAN.md](PLAN.md) for phase-by-phase status). This
-document remains the architectural reference — the settled decisions and data model below match the
-code; the Mastodon gateway (§6.2) and derivatives (§6.3) are the notable not-yet-built pieces.
+Status: **implemented through Phase 6, plus the §6 live demo UI** (all four components, cold-data
+archival, the end-to-end demo, the FxcExchange/FxcBroker consoles, and the Locust load harness are
+built and tested; the demo runs continuously — see [PLAN.md](PLAN.md) for phase-by-phase status). This document remains the architectural
+reference — the settled decisions and data model below match the code; the Mastodon gateway (§7.2)
+and derivatives (§7.3) are the notable not-yet-built pieces.
 
 ## 1. Overview
 
 FXC is four independent components exchanging messages over standard financial and social
 protocols. The instrument universe covers **FX spot pairs** (EUR/USD, GBP/USD, USD/JPY, ...)
 and **cash equities** (ticker symbols), unified behind a common instrument abstraction (§3.0).
-Derivatives (options, futures) are an explicit ToDo (§6.3).
+Derivatives (options, futures) are an explicit ToDo (§7.3).
 
 ```
-   Mastodon clients ┄┄┄▶[ XMPP↔Mastodon gateway — late-phase addon (§6.2) ]
+   Mastodon clients ┄┄┄▶[ XMPP↔Mastodon gateway — late-phase addon (§7.2) ]
                                      ┊ (deferred)
                          ┌──────────────────────────┐
    XMPP clients ────────▶│         FxcPub           │
@@ -36,7 +37,7 @@ Derivatives (options, futures) are an explicit ToDo (§6.3).
 
 | Decision | Choice |
 |---|---|
-| FxcPub architecture | Stock (100% unmodified) Tigase XMPP server + FxcPub XMPP-client app layer; Mastodon REST deferred to a late-phase gateway addon (§6.2). Was Vysper — see [PROBLEMS.md](PROBLEMS.md) P1 |
+| FxcPub architecture | Stock (100% unmodified) Tigase XMPP server + FxcPub XMPP-client app layer; Mastodon REST deferred to a late-phase gateway addon (§7.2). Was Vysper — see [PROBLEMS.md](PROBLEMS.md) P1 |
 | Broker → Pub channel | Both: FIX drop-copy session AND XMPP client (bot account) |
 | FIX engine / version | QuickFIX/J, FIX 4.4 |
 | FxcInvestor UI | Headless agent + thin CLI (REPL) |
@@ -44,8 +45,14 @@ Derivatives (options, futures) are an explicit ToDo (§6.3).
 | OFX stack | OFX 2.x XML via OFX4J |
 | Agent brain | Rule-based pluggable `Strategy` interface |
 | Hot state (Pub/Broker/Exchange) | GridGain 8 services + GridGain 8 tables, in-memory by default |
+| GridGain edition & license | Ultimate Edition; its signed XML license is located by one property in the committed root `gridgain.properties`, which the build resolves into `-Dgridgain.license.url` for every `run`/`test` JVM (§3.1) |
 | FxcInvestor persistence | MariaDB |
 | Cold / archival data (all components) | MariaDB |
+| Component consoles (§6) | FxcExchange + FxcBroker only; static HTML+CSS+JS over REST, dark theme, D3+SVG. FxcPub stays headless; FxcInvestor's workload is steered from the Locust UI instead (§6.5) |
+| D3 delivery | Full `d3.v7.min.js` **vendored** into `fxc-common` resources and served off the classpath — the demo runs offline, and a static asset keeps the framework-free rule intact (§6.1) |
+| Console controls | Unauthenticated; each component gates them behind one config key and can serve a read-only console (§6.4, §7.8) |
+| Investor load harness | **Locust** (Python, `loadgen/`, containerised) — replaced Gatling, whose knobs freeze at JVM start so a run cannot be steered. Outside the Gradle build; UI on :8089 (§6.5) |
+| Investor liquidity policy | The non-naive strategies (`booker`, `bookfish`) scale buying to available cash and sell assets to maintain a cash floor, so a continuous demo does not exhaust an account. `rando` stays naive (§6.5) |
 
 ## 3. Data architecture
 
@@ -81,7 +88,7 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
   `SettlementProfile` and the OFX statement mapping (§4.2).
 - **Derivatives (options, futures) are explicitly out of scope for now** — the sealed
   hierarchy, `AssetClass` enum, and `SettlementProfile` are the designated extension points;
-  see §6.3.
+  see §7.3.
 
 ### 3.1 GridGain 8 (hot state) — FxcPub, FxcBroker, FxcExchange
 
@@ -97,10 +104,30 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
 - Operational data lives in **GridGain SQL tables** (caches with query entities / `CREATE TABLE`),
   **in-memory by default**; GridGain native persistence stays off unless configured.
 - Dependency: GridGain 8 **Ultimate Edition** artifacts (`org.gridgain:gridgain-ultimate` et al.
-  from the GridGain Nexus repository). Ultimate is a licensed edition — each embedded node loads a
-  signed license (`gridgain-license.xml`) via `GridGainConfiguration.setLicenseUrl(...)`, sourced
-  from the root `gridgain.properties` (see PROBLEMS.md P5). The former API-compatible Apache Ignite
-  2.x drop-in fallback has been removed.
+  from the GridGain Nexus repository — see [BUILDING.md](BUILDING.md#gridgain-license)). The former
+  API-compatible Apache Ignite 2.x drop-in fallback has been removed.
+- **License resolution.** Ultimate is a licensed edition: every node must be handed a signed
+  **GridGain 8 XML** license (v2.1 — *not* the GridGain 9 JSON form) at start, via
+  `GridGainConfiguration.setLicenseUrl(...)`. The design names the license *location* in exactly one
+  committed place and keeps the license *file* itself out of version control:
+  - **`gridgain.properties`** (repo root, committed) declares the location in a single property,
+    `gridgain.license.file` — either a path resolved relative to the repo root, or a value that
+    already carries a URL scheme (`file:`, `http:`, …), which is used verbatim. Relocating the
+    license is a one-line edit here and nowhere else.
+  - **The root `build.gradle.kts`** reads that property once, resolves it to a canonical absolute
+    `file:///` URL, and injects it as the `gridgain.license.url` system property into every
+    Gradle-launched component JVM — `run` (`JavaExec`) and `test` (`Test`) alike, for all three
+    GridGain components. The URL must be absolute because forked JVMs run with the subproject
+    directory as their working directory, not the repo root.
+  - **`GridNode.licenseUrl()`** (one per GridGain component) resolves the location at node start
+    with the precedence `-Dgridgain.license.url` → `GRIDGAIN_LICENSE_URL` env var → the bare
+    filename `gridgain-license.xml` relative to the launch directory. The last is the fallback for
+    non-Gradle launches (packaged distributions); bare paths are converted to absolute `file://`
+    URLs, since `setLicenseUrl` takes a URL rather than a path.
+  - The license file itself is **gitignored** and obtained per the GridGain contract. Compiling and
+    assembling need no license; *starting a node* does — which includes most `./gradlew test` runs,
+    as a missing or invalid license fails node start with `ProductLicenseException`. Operator-facing
+    steps are in [BUILDING.md](BUILDING.md#gridgain-license).
 
 ### 3.2 MariaDB (durable + cold)
 
@@ -140,17 +167,21 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
   (b) a framework-free **REST** service (JDK `HttpServer`) serving time-bucketed OHLCV **candles** +
   a volume-by-price histogram, with age-based minimum-granularity floors and hot+cold trade reads;
   and (c) a live one-second **ticker WebSocket** (hand-rolled RFC 6455 — no web framework, matching
-  the OFX transport) feeding a self-contained **charting web UI**. No new runtime dependencies.
+  the OFX transport) feeding a **charting web UI**. No new runtime dependencies.
+- **Trading session & console (`com.fxc.exchange.control`, docs/stories/002)** — `TradingSession`
+  (market-wide + per-symbol halt, combined to the safer state), `MatchingEngine.clearBook` mass
+  cancel with FIX `CANCELED` reporting via `CancelReporter`, and `ExchangeControlService` behind the
+  console's status/control REST endpoints (§6.2).
 
 ### 4.2 FxcBroker — OFX brokerage + OMS
 
 - **OFX 2.x server** (OFX4J over an embedded HTTP server): signon, account info, and investment
   statement download (positions, transactions, balances) for FxcInvestor clients. Equity
   positions map natively to OFX stock holdings; FX positions are reported as pseudo-securities
-  (§6.6).
+  (§7.6).
   - OFX has **no native order-entry messages**; order placement uses a **custom private
     message set** (`<FXC.ORDERMSGSRQV1>`) carried in the same OFX envelope. Flagged as an open
-    item in §6.4.
+    item in §7.4.
 - **OMS** (`OmsService`, GridGain service): validates client orders (account exists, tick/lot
   compliance, margin/balance check), routes to FxcExchange over a QuickFIX/J **initiator**
   session, tracks order state from `ExecutionReport`s, updates positions. Asset-class agnostic —
@@ -160,8 +191,12 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
 - **Publication**: on every fill, (a) sends drop-copy `ExecutionReport` over a second QuickFIX/J
   initiator session to FxcPub, and (b) posts a human-readable status via XMPP (Smack client) as
   its bot account on FxcPub.
-- **GridGain tables**: `ACCOUNT`, `POSITION`, `CLIENT_ORDER`, `EXECUTION`.
+- **GridGain tables**: `ACCOUNT`, `POSITION`, `CLIENT_ORDER`, `EXECUTION` (the last carries
+  `account_number` + `ts` for the console's P&L series — see §6.3).
 - `ArchiveService` drains terminal orders/executions to MariaDB.
+- **Console (`com.fxc.broker.web`, `com.fxc.broker.pnl`, docs/stories/002)** — an operator
+  start/stop-trading gate on `OmsService`, session mark-to-market P&L per account (`PnlService`,
+  `FxRates`), and a second HTTP server on 8083 serving the monitor console (§6.3).
 
 ### 4.3 FxcPub — stock Tigase + XMPP-client application layer
 
@@ -216,7 +251,7 @@ Components of FxcPub:
 
 **Deferred — Mastodon-compatibility gateway (late-phase addon).** Exposing a Mastodon-compatible
 REST API (`/api/v1/...`) so stock Mastodon clients can read/post is **not** part of the initial
-FxcPub. It is designed and built later as a **separate XMPP↔Mastodon gateway addon** (§6.2) that
+FxcPub. It is designed and built later as a **separate XMPP↔Mastodon gateway addon** (§7.2) that
 also acts purely as an XMPP client of stock Tigase — keeping the unmodified-Tigase principle
 intact. Until then, FxcPub is XMPP-native and its clients (FxcBroker, FxcInvestor) speak XMPP
 directly. The Javalin dependency and the REST/OAuth surface move to that addon's phase.
@@ -233,6 +268,12 @@ directly. The Javalin dependency and the REST/OAuth surface move to that addon's
   with one built-in momentum/threshold demo strategy. Deterministic and unit-testable.
 - **MariaDB persistence** (plain JDBC + `schema.sql`): agent config, decision log, mirrored
   order/position history. Same store doubles as its archive.
+- **Holdings** are read over OFX on an interval by `PortfolioCache` and passed to the strategy. Both
+  agent loops previously passed `PortfolioView.empty()`, so no strategy could see its own cash or
+  shares; the liquidity policy (§6.5) depends on this. An interval rather than per tick because a
+  statement read is a round trip and the broker's OFX pool is small (`ofx.http.threads`).
+- **Load generation is a separate concern** — see §6.5. The Java agents are the architectural
+  participants (Strategy SPI, XMPP timeline, decision log); volume comes from the Locust harness.
 
 ## 5. Shared infrastructure
 
@@ -241,12 +282,182 @@ directly. The Javalin dependency and the REST/OAuth surface move to that addon's
   FIX 4.4 data-dictionary XML, OFX private-message-set constants, config loading helpers.
   No business logic. Components stay independently runnable.
 - **Ports** (dev defaults): Tigase XMPP 5222, FxcPub FIX drop-copy acceptor 9878;
-  FxcBroker OFX HTTP 8082; FxcExchange FIX acceptor 9876; MariaDB 3306. (Mastodon-gateway
-  REST port 8081 is reserved for the late-phase addon, §6.2.)
+  FxcBroker OFX HTTP 8082 and **console HTTP 8083**; FxcExchange FIX acceptor 9876, **feed/console
+  HTTP 8090 and live-ticker WebSocket 8091**; **Locust load-harness UI 8089** (§6.5); MariaDB 3306.
+  GridGain discovery: exchange 47500, broker 47510, pub 47520. (Mastodon-gateway REST port 8081 is
+  reserved for the late-phase addon, §7.2.)
+  - **Trap:** `FxcExchange/conf/fxcexchange.conf`'s `fix.acceptor.*` keys are *not* read — the FIX
+    port comes from the classpath `quickfixj/exchange-acceptor.cfg`. Editing the conf does not move
+    it.
 - **Config**: each component reads an HOCON/properties file (`conf/<component>.conf`) with
   sensible localhost defaults so `./gradlew :X:run` works out of the box.
 
-## 6. Open items (flagged, not blocking)
+## 6. Live Demo UI
+
+Status: **implemented** for FxcExchange and FxcBroker (stories `FxcExchange/docs/stories/002`,
+`FxcBroker/docs/stories/002`, `fxc-common/docs/stories/001`). Consoles at
+`http://localhost:8090/` (exchange) and `http://localhost:8083/` (broker).
+
+Requirements:
+
+1. Each component described in this section provides a controller/monitor UI.
+2. The UI is a static HTML+CSS+JS web interface interacting with a REST API.
+3. The UI adopts a "dark" theme and provides a D3-based status indicator as the main pane.
+4. The UI provides a mouseover dropdown menu of controls.
+
+**Scope — FxcExchange and FxcBroker only.** FxcPub and FxcInvestor stay headless (§4.3/§4.4); the
+shared toolkit below is built so adding a console for either is additive. Jeremy's call, 2026-07-28.
+
+### 6.1 Shared web toolkit (`fxc-common`)
+
+The two consoles are one product, so their common parts live in `fxc-common` under
+`com.fxc.common.web` and are served off the classpath from the `fxc-common` jar — no per-component
+copies and no build step:
+
+- **`Json`** — the hand-rolled JSON writer, promoted from `com.fxc.exchange.feed`. Write-only by
+  design: control endpoints take **query parameters with an empty body**, so FXC still needs no JSON
+  *parser* (§4.1's framework-free rule).
+- **`HttpJson`** — response/CORS/preflight helpers, method gating, and `requireExactPath`. The last
+  exists because `HttpServer` contexts match by longest prefix: a context at `/api/book` also
+  receives `/api/book/clear`, and without an exact-path check an endpoint either serves a path it
+  does not own or reports "method not allowed" for a path it never had.
+- **`StaticAssets`** — classpath static serving with a MIME map, a path-traversal allowlist, and a
+  content-hash `ETag` (so the ~280 KB D3 bundle is read and hashed once, then answered 304). Resolves
+  before gating the method, so a POST to an unserved path reads as 404 rather than 405.
+- **Shared assets** under `web/common/`: `fxc.css` (the theme), `fxc-menu.js` (the §6.4 dropdown),
+  `fxc-status.js` (the §6.3 D3 status indicator), `fxc-api.js` (polling with backoff, WebSocket
+  reconnect + staleness), and `vendor/d3.v7.min.js`.
+
+**D3 is vendored, not fetched** (`web/common/vendor/`, with provenance in that directory's
+README). The demo runs offline, so a CDN reference is not acceptable; the full minified bundle is
+used rather than a module subset precisely so no npm/node build step enters the repo. It is a static
+*asset*, not a Gradle runtime dependency — `gradle/libs.versions.toml` is untouched and the
+framework-free convention holds.
+
+**Colour is validated, not eyeballed.** The categorical series slots, the candle up/down pair and the
+status steps were each measured against the console surface (`#16181d`) for lightness band, chroma
+floor, colour-vision-deficiency separation and contrast. Two results shaped the design: candle
+up/down clears the CVD target only narrowly, so candles carry **shape** as well as colour (hollow
+body = up, filled = down, the traditional convention); and the status steps are a reserved set held
+to contrast plus a **glyph and text label**, never colour alone.
+
+### 6.2 FxcExchange console
+
+Dropdown controls start and stop trading sessions (market-wide or for the selected symbol) and clear
+the order book. The main pane connects to the feed service and displays 1-minute price candles for a
+selectable traded security, with a transparent volume bar chart underlay in the bottom 20% of the
+chart canvas, plus story 001's right-side volume-by-price histogram at 30% opacity.
+
+Backend added for it (§4.1): `TradingSession` (the exchange had **no** market-state concept — the
+matching engine accepted orders unconditionally and FIX sessions run 24h), `OrderBook.cancelAll` /
+`MatchingEngine.clearBook`, and `ExchangeControlService` behind
+`GET /api/status`, `GET /api/book`, `POST /api/session/halt|open`, `POST /api/book/clear`.
+
+**Clearing the book reports every cancellation back over FIX** (`CancelReporter`, implemented by
+`ExchangeApplication`). Each broker's OMS tracks order state from `ExecutionReport`s, so orders that
+vanished from the exchange without a `CANCELED` report would leave every connected broker believing
+it still had live orders — a silent divergence, and the single most important behaviour in this
+section.
+
+The live ticker also gained a **heartbeat** and a real **pong** reply: a quiet market publishes no
+tick, so without them a client cannot tell silence from a dead socket. A D3 `scaleTime` x axis
+replaced the previous position-indexed Canvas renderer, which drew the sparse candle series (empty
+buckets are omitted) with compressed, untruthful time gaps.
+
+### 6.3 FxcBroker console
+
+Dropdown controls start and stop trading. The main pane displays a ticker of last sale prices from
+the exchange feed at the top, and a line plot of each managed account's trade count on the X axis
+against relative account profit and loss on the Y axis over a trading session.
+
+Backend added for it (§4.2): an `OmsService` operator gate (independent of the exchange's market
+state — the broker can stand down while the exchange stays open), `PnlService` + `FxRates`, and
+`BrokerConsoleService` behind `GET /api/status|accounts|lastsale|pnl` and
+`POST /api/trading/start|stop` on a **separate HTTP server** (port 8083) so the OFX endpoint stays
+POST-only and the console can be disabled independently. The broker console polls its own REST
+endpoints once a second rather than opening a WebSocket, so it keeps working when the exchange feed
+is off and reads the broker's own market data instead of reaching past it.
+
+**P&L definition.** Equity is valued in USD as cash plus share positions marked at the exchange's
+last sale; `relative` is equity now minus equity at session start. `realized` is closed-trade P&L
+(an equity sell against its VWAP cost basis) and `unrealized` is the remainder, so the two always
+sum to `relative`. An FX spot fill contributes nothing to `realized` — it swaps one balance for
+another — and shows up through revaluation instead. Points are sampled **as fills happen** because
+the broker does not historise marks, so the curve cannot be reconstructed afterwards; a restart
+therefore starts a new session. Stated approximations: a share with no mark yet is valued at cost
+basis (valuing it at zero would invent a large gain on its first trade), a holding whose currency has
+no resolvable USD rate is excluded and *counted* (`unpricedHoldings`) rather than guessed at, and the
+baseline is taken once and never revised.
+
+`EXECUTION` (and `EXECUTION_ARCHIVE`) gained `account_number` and `ts`: a fill could otherwise only
+be attributed to an account by joining `CLIENT_ORDER`, which the archiver deletes, so a session's
+P&L history was not derivable from stored data at all.
+
+### 6.4 Control-endpoint exposure
+
+The control endpoints mutate live trading and are **unauthenticated**, consistent with §7.7 ("auth
+realism"). Each component therefore gates them behind one config key — `feed.controls.enabled`
+(exchange) and `web.controls.enabled` (broker) — which, when false, does not register the mutating
+contexts at all and makes the console render read-only. They also bind whatever host the component
+binds, which for the dev defaults is `0.0.0.0`; a non-demo deployment wants both a bind address and
+real authentication. Tracked as §7.8.
+
+
+### 6.5 Investor workload: the Locust load harness and the liquidity policy
+
+Status: **implemented** (FxcInvestor/docs/stories/006). Harness UI at `http://localhost:8089`;
+`scripts/demo.sh` runs continuously by default.
+
+**Why Locust replaced Gatling.** The demo needed a workload that runs until stopped and can be steered
+from a browser. Gatling OSS cannot do the second part, and this was verified in the plugin bytecode
+rather than assumed: every `sim.*` knob is read in a *static initializer* and frozen when the JVM
+starts, `gatlingRun` is a fire-and-forget forked task, and the HTML report is a post-run batch step
+that refuses to emit anything until the run is over. A live control console exists only in the
+commercial **Gatling Enterprise**. Locust ships one, plus a `/swarm` REST API and a master/worker mode
+that leaves multi-process scale-out open without code changes.
+
+**Where it lives.** `loadgen/` — a standalone Python package, **not** a Gradle module, so
+`./gradlew build` is byte-for-byte unaffected. This is the same reasoning that kept npm out of the repo
+for D3 (§6.1): a second language is acceptable as an isolated *tool*, not as a second build step. It is
+containerised (`docker/locust/`), following the precedent set for Tigase — a second runtime, isolated
+in a container, never invoked from the host — so the host toolchain stays JDK-21-only. The honest cost:
+Gatling installed itself through Gradle for free, and this does not (see BUILDING.md).
+
+**The wire contract is the risk, because every way of breaking it is silent.** The harness speaks OFX
+2.x to FxcBroker without OFX4J, and the broker answers **HTTP 200** for a rejected signon (signon-only
+envelope, `CODE 15500`) *and* for a misspelled tag (the message set is skipped entirely). A harness
+trusting HTTP status would report unbroken success while placing no orders. Three defences:
+
+- **Golden fixtures** in `FxcInvestor/sample_data/`, generated from OFX4J by `OfxGoldenEnvelopeTest`
+  and asserted byte-identical from Python. `OfxBrokerClient.marshalOrder` is retained as the
+  authoritative Java-side marshaller for exactly this purpose.
+- **Loud failures**: the Python client turns both silent modes into exceptions rather than returning a
+  half-parsed answer.
+- **Split metrics**: the harness reports transport separately from business outcome, so a broker
+  rejection — the system working — never colours the failure ratio but is always visible by reason.
+
+Two broker-side facts the harness exposed: an **empty element is a fatal 400** (the parser reads it as
+an aggregate close), so requests are built as strings and a blank value is refused; and the OFX server
+was a hardcoded four-thread pool, now `ofx.http.threads`, which is the real ceiling on throughput.
+
+**Liquidity policy.** The seeded accounts hold 1,000 shares and $1,000,000; a one-sided stream exhausts
+one of them within minutes and then produces only rejections — which is why the demo could not run
+continuously. The **non-naive** strategies (`booker`, `bookfish`) are therefore wrapped in a policy
+that (1) forces a SELL sized to restore a cash floor when cash falls below a fraction of the cash first
+observed, (2) caps buys to a fraction of the cash *above* that floor, so buying cannot breach it, and
+(3) clamps sells to holdings rather than being rejected for shorting. `rando` stays **naive** by design
+(story 001) and is wrapped by nothing.
+
+Implemented twice — Java `strategy.LiquidityAwareStrategy` and Python `fxc_loadgen.liquidity` — with
+matching tests, because `booker` must not mean two different things in two languages. A **decorator**
+rather than a change to `SamplingStrategy`, so `rando`'s existing tests pass untouched and prove it.
+Requirements round **up** onto the lot grid (a floor must actually be reached) while bounds round
+**down** (never exceed cash or holdings). Both fail closed: with no holdings data they decline to trade.
+
+Verified by a continuous run: **2,168 fills over 3.5 minutes with zero rejections**, equity
+mean-reverting around the seeded baseline rather than draining.
+
+## 7. Open items (flagged, not blocking)
 
 Confirmed dependency coordinates and versions live in `.reference/README.md` (gathered
 2026-07-13). Items marked ⚠️ were escalated by that research and warrant a decision.
@@ -259,7 +470,7 @@ Confirmed dependency coordinates and versions live in `.reference/README.md` (ga
    **Resolved JDK finding:** Tigase 8.4.1 runs on **JDK 17, not 21/25** — its bundled Groovy/ASM
    cannot read Java 21+ class files (`Unsupported class file major version 65`). Our image builds
    `FROM eclipse-temurin:17-jre`; because Tigase is a separate container this does not constrain
-   FXC's own Java-21 processes (see README "JDK requirements", PROBLEMS.md P5).
+   FXC's own Java-21 processes (see README "JDK requirements", PROBLEMS.md P2).
 2. **ToDo: Mastodon-compatibility gateway (late-phase addon).** Exposing a Mastodon-compatible
    REST API (`/api/v1/statuses`, `/timelines/home`, `/timelines/public`, `/accounts/:id`,
    `/follows`, stub OAuth) so stock Mastodon clients can read/post is **deferred**, out of the
@@ -288,12 +499,14 @@ Confirmed dependency coordinates and versions live in `.reference/README.md` (ga
    map to `POSOTHER`/`OtherPosition` with a synthetic `SECID` (e.g. `UNIQUEID=FX:EURUSD`).
 7. **Auth realism** — OFX signon (and the deferred Mastodon OAuth) use static dev credentials
    initially.
-8. **GridGain 8 artifact access & licensing** — GridGain 8 Ultimate Edition
-   (`org.gridgain:gridgain-ultimate`) is **not on Maven Central**; the build adds the GridGain Nexus
-   repo. Ultimate is licensed: each node loads `gridgain-license.xml` (a GridGain 8 **XML** license —
-   not the GridGain 9 JSON form) via the single-source `gridgain.properties`. The Apache Ignite 2.x
-   fallback has been removed. Embedded GridGain on JDK 21 also needs a specific `--add-opens` flag
-   set — captured in `.reference/gridgain/README.md`. See PROBLEMS.md P4/P5.
-9. **Javalin version (gateway phase only)** — needed by the deferred Mastodon gateway (§6.2), not
+8. **⚠️ Console controls are unauthenticated and bind `0.0.0.0`.** The §6 consoles ship with
+   operator controls that mutate live trading (halt/resume, clear the order book, stop/start broker
+   order handling) behind no authentication, on the dev bind address. Mitigated for demo use by a
+   per-component switch (`feed.controls.enabled`, `web.controls.enabled`) that unregisters the
+   mutating endpoints entirely and renders a read-only console; consistent with item 7 above, which
+   this shares a root cause with. Anything beyond a demo needs real auth and a bind address, and the
+   destructive actions want an audit trail. The consoles' read paths and visualizations are
+   **implemented** (§6) — this item is the security posture only.
+9. **Javalin version (gateway phase only)** — needed by the deferred Mastodon gateway (§7.2), not
    the core. Current is **7.2.2** (Java 17+), whose routing API moved into a `config.routes { }`
    block; pin Javalin 6.x if we prefer the classic `app.get(...)` API.

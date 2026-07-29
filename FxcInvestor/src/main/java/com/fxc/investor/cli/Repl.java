@@ -3,6 +3,7 @@ package com.fxc.investor.cli;
 import com.fxc.common.instrument.Instrument;
 import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.investor.agent.InvestorAgent;
+import com.fxc.investor.agent.PortfolioCache;
 import com.fxc.investor.agent.SubmittedOrder;
 import com.fxc.investor.feed.FeedClient;
 import com.fxc.investor.ofx.OfxBrokerClient;
@@ -43,6 +44,7 @@ public final class Repl {
     private final String strategyName;
     private final String ownFeedId;      // where `post` publishes
     private final long agentIntervalMs;
+    private final PortfolioCache portfolio;
 
     private final AtomicLong cliSeq = new AtomicLong();
     private final Deque<String> recentOrders = new ArrayDeque<>();
@@ -51,7 +53,7 @@ public final class Repl {
 
     public Repl(OfxBrokerClient broker, MarketView market, InvestorAgent agent, FeedClient feed,
                 InvestorStore store, String account, String defaultSymbol, String strategyName,
-                String ownFeedId, long agentIntervalMs) {
+                String ownFeedId, long agentIntervalMs, PortfolioCache portfolio) {
         this.broker = broker;
         this.market = market;
         this.agent = agent;
@@ -62,6 +64,7 @@ public final class Repl {
         this.strategyName = strategyName;
         this.ownFeedId = ownFeedId;
         this.agentIntervalMs = agentIntervalMs;
+        this.portfolio = portfolio;
     }
 
     public void run() throws Exception {
@@ -203,7 +206,7 @@ public final class Repl {
                             // book relay unavailable; booker falls back to rando
                         }
                     }
-                    Optional<SubmittedOrder> submitted = agent.step(defaultSymbol, PortfolioView.empty());
+                    Optional<SubmittedOrder> submitted = agent.step(defaultSymbol, portfolio.current());
                     submitted.ifPresent(o -> {
                         String line = "[agent] " + o.intent().side() + " " + o.intent().quantity() + " "
                                 + defaultSymbol + " @ " + o.snappedPrice() + " -> " + o.status();

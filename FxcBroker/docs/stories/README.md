@@ -16,3 +16,6 @@ Relates to: PLAN item / DESIGN §
 
 - [001 — investor-requested order-book snapshot](001-order-book-snapshot.md): relay an exchange
   FIX order-book snapshot to an investor over OFX (unblocks `booker`/`bookfish`).
+- [002 — broker monitor/controller console](002-broker-monitor-ui.md): the demo console (root
+  DESIGN §6.3) — last-sale ticker, per-account session P&L (the repo's first P&L), and an operator
+  start/stop-trading gate, on a separate HTTP server on 8083.

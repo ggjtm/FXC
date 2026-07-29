@@ -10,6 +10,9 @@ import com.fxc.broker.ofx.OfxService;
 import com.fxc.broker.oms.BrokerDropCopyClient;
 import com.fxc.broker.oms.BrokerFixClient;
 import com.fxc.broker.oms.OmsService;
+import com.fxc.broker.pnl.PnlService;
+import com.fxc.broker.web.BrokerConsoleService;
+import com.fxc.broker.web.BrokerWebServer;
 import com.fxc.common.store.ColdStore;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -34,11 +37,13 @@ public final class BrokerServer implements AutoCloseable {
     private final ArchiveService archiveService;
     private final ScheduledExecutorService archiveExecutor;
     private final ColdStore coldStore;
+    private final PnlService pnlService;
+    private final BrokerWebServer webServer;    // nullable
 
     private BrokerServer(GridNode node, AccountService accountService, OmsService omsService,
                          BrokerFixClient fixClient, BrokerDropCopyClient dropCopyClient, OfxHttpServer ofxServer,
                          ArchiveService archiveService, ScheduledExecutorService archiveExecutor,
-                         ColdStore coldStore) {
+                         ColdStore coldStore, PnlService pnlService, BrokerWebServer webServer) {
         this.node = node;
         this.accountService = accountService;
         this.omsService = omsService;
@@ -48,6 +53,18 @@ public final class BrokerServer implements AutoCloseable {
         this.archiveService = archiveService;
         this.archiveExecutor = archiveExecutor;
         this.coldStore = coldStore;
+        this.pnlService = pnlService;
+        this.webServer = webServer;
+    }
+
+    /** The console's session P&L service. */
+    public PnlService pnlService() {
+        return pnlService;
+    }
+
+    /** The monitor/controller console server, or {@code null} if the console is disabled. */
+    public BrokerWebServer webServer() {
+        return webServer;
     }
 
     /**
@@ -77,6 +94,41 @@ public final class BrokerServer implements AutoCloseable {
                                      String brokerId, Consumer<AccountService> seeder,
                                      SessionSettings dropCopySettings,
                                      ColdStore coldStore, long archiveIntervalMs) throws Exception {
+        return start(gridInstanceName, gridDiscoveryPort, workDir, fixInitiatorSettings, ofxHost, ofxPort,
+                ofxUser, ofxPassword, brokerId, seeder, dropCopySettings, coldStore, archiveIntervalMs,
+                -1, true, OfxHttpServer.DEFAULT_THREADS);
+    }
+
+    /** Start with the console, at the default OFX thread count. */
+    public static BrokerServer start(String gridInstanceName, int gridDiscoveryPort, String workDir,
+                                     SessionSettings fixInitiatorSettings,
+                                     String ofxHost, int ofxPort, String ofxUser, String ofxPassword,
+                                     String brokerId, Consumer<AccountService> seeder,
+                                     SessionSettings dropCopySettings,
+                                     ColdStore coldStore, long archiveIntervalMs,
+                                     int webPort, boolean webControlsEnabled) throws Exception {
+        return start(gridInstanceName, gridDiscoveryPort, workDir, fixInitiatorSettings, ofxHost,
+                ofxPort, ofxUser, ofxPassword, brokerId, seeder, dropCopySettings, coldStore,
+                archiveIntervalMs, webPort, webControlsEnabled, OfxHttpServer.DEFAULT_THREADS);
+    }
+
+    /**
+     * Start, additionally serving the monitor/controller console (FxcBroker/docs/stories/002).
+     *
+     * @param webPort         console HTTP port, or {@code < 0} to run without a console
+     *                        ({@code 0} binds ephemeral)
+     * @param webControlsEnabled whether the console's start/stop trading control is exposed. It is
+     *                        unauthenticated, so this is a deliberate switch — see docs/DESIGN.md §7.
+     * @param ofxThreads      OFX request threads; the ceiling on OFX throughput under load.
+     */
+    public static BrokerServer start(String gridInstanceName, int gridDiscoveryPort, String workDir,
+                                     SessionSettings fixInitiatorSettings,
+                                     String ofxHost, int ofxPort, String ofxUser, String ofxPassword,
+                                     String brokerId, Consumer<AccountService> seeder,
+                                     SessionSettings dropCopySettings,
+                                     ColdStore coldStore, long archiveIntervalMs,
+                                     int webPort, boolean webControlsEnabled,
+                                     int ofxThreads) throws Exception {
         GridNode node = GridNode.start(gridInstanceName, gridDiscoveryPort, workDir);
         try {
             BrokerTables.createAll(node.ignite());
@@ -92,6 +144,12 @@ public final class BrokerServer implements AutoCloseable {
             // (FxcBroker/docs/stories/001).
             com.fxc.broker.md.MarketDataCache marketData = new com.fxc.broker.md.MarketDataCache();
             fixClient.setMarketDataCache(marketData);
+
+            // Session P&L for the console (stories/002). Baselines are captured now — after seeding
+            // and before any order can be routed — because every later figure is relative to them.
+            PnlService pnlService = new PnlService(accountService, marketData, System::currentTimeMillis);
+            pnlService.captureBaselines();
+            omsService.addFillListener(pnlService);
 
             fixClient.start();
             // Best-effort: wait for the exchange session so routing/market-data work immediately.
@@ -109,8 +167,17 @@ public final class BrokerServer implements AutoCloseable {
             }
 
             OfxService ofxService = new OfxService(omsService, accountService, marketData, ofxUser, ofxPassword, brokerId);
-            OfxHttpServer ofxServer = new OfxHttpServer(ofxHost, ofxPort, "/ofx", ofxService);
+            OfxHttpServer ofxServer =
+                    new OfxHttpServer(ofxHost, ofxPort, "/ofx", ofxService, ofxThreads);
             ofxServer.start();
+
+            BrokerWebServer webServer = null;
+            if (webPort >= 0) {
+                BrokerConsoleService consoleService = new BrokerConsoleService(omsService, accountService,
+                        marketData, pnlService, fixClient::isLoggedOn, System::currentTimeMillis);
+                webServer = new BrokerWebServer(ofxHost, webPort, consoleService, webControlsEnabled);
+                webServer.start();
+            }
 
             ArchiveService archiveService = null;
             ScheduledExecutorService archiveExecutor = null;
@@ -134,7 +201,7 @@ public final class BrokerServer implements AutoCloseable {
             }
 
             return new BrokerServer(node, accountService, omsService, fixClient, dropCopyClient, ofxServer,
-                    archiveService, archiveExecutor, coldStore);
+                    archiveService, archiveExecutor, coldStore, pnlService, webServer);
         } catch (Exception e) {
             node.close();
             throw e;
@@ -166,6 +233,9 @@ public final class BrokerServer implements AutoCloseable {
     public void close() {
         if (archiveExecutor != null) {
             archiveExecutor.shutdownNow();
+        }
+        if (webServer != null) {
+            webServer.close();
         }
         ofxServer.close();
         if (dropCopyClient != null) {

@@ -1,0 +1,32 @@
+# FXC load harness (Python + Locust) — FxcInvestor/docs/stories/006.
+#
+# Deliberately NOT a Gradle module and not wired into the Gradle build: `./gradlew build` is
+# byte-for-byte unaffected by this directory. That is what keeps the repo's framework-free
+# convention intact (docs/DESIGN.md §6.1 refused an npm/node build step for the same reason) while
+# still getting a load generator with a live control UI, which Gatling could not provide.
+#
+# It replaces the retired Gatling harness because Locust's web UI can start, stop, and re-rate a run
+# *while it is running*; every Gatling `sim.*` knob was frozen in a static initializer at JVM start.
+#
+# The core codec and strategy logic are tested with the standard library alone:
+#     python3 -m unittest discover -s tests -t .
+# so reviewing or changing that logic needs no pip install. Locust is required only to *drive* load.
+
+[project]
+name = "fxc-loadgen"
+version = "0.1.0"
+description = "OFX-over-HTTP investor load generator for FXC, driven by Locust"
+requires-python = ">=3.11"
+
+# Pinned, per the repo's convention of never depending on a rolling tag (cf. mariadb:11.8,
+# tigase 8.4.1). Catalogue the coordinate in .reference/README.md when bumping.
+dependencies = [
+    "locust==2.32.5",
+]
+
+[project.optional-dependencies]
+# Only needed to run the harness against a broker; the unittest suite needs nothing.
+dev = []
+
+[tool.setuptools.packages.find]
+include = ["fxc_loadgen*"]

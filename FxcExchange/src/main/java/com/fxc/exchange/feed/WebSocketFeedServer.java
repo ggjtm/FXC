@@ -23,9 +23,12 @@ import java.util.concurrent.ExecutorService;
  * reserved for the deferred Mastodon gateway).
  *
  * <p>Scope is deliberately narrow: it performs the upgrade handshake, then pushes server→client
- * <b>text</b> frames; inbound frames are drained only to detect client close/ping. A connection's
- * {@code symbol} query parameter filters which symbols it receives ({@code *} or absent = the full
- * ticker feed of all securities). Not a general-purpose WebSocket implementation.
+ * <b>text</b> frames. Inbound frames are drained rather than delivered, except that {@code close} ends
+ * the connection and {@code ping} is answered with a {@code pong} carrying the same payload (browsers
+ * and proxies use that keep-alive to decide a socket is alive). A connection's {@code symbol} query
+ * parameter filters which symbols it receives ({@code *} or absent = the full ticker feed of all
+ * securities); {@link #broadcast} bypasses the filter for feed-level messages. Not a general-purpose
+ * WebSocket implementation.
  */
 public final class WebSocketFeedServer implements AutoCloseable {
 
@@ -62,6 +65,16 @@ public final class WebSocketFeedServer implements AutoCloseable {
             if (c.wants(symbol)) {
                 c.send(json);
             }
+        }
+    }
+
+    /**
+     * Push a JSON message to every client regardless of symbol filter — for feed-level messages
+     * such as heartbeats, which are not about one instrument.
+     */
+    public void broadcast(String json) {
+        for (Client c : connections) {
+            c.send(json);
         }
     }
 
@@ -107,7 +120,7 @@ public final class WebSocketFeedServer implements AutoCloseable {
 
             client = new Client(socket, out, symbolFilter(requestLine));
             connections.add(client);
-            drainUntilClose(in); // blocks; returns on client close/EOF
+            drainUntilClose(in, client); // blocks; returns on client close/EOF
         } catch (IOException e) {
             // client gone
         } finally {
@@ -166,8 +179,14 @@ public final class WebSocketFeedServer implements AutoCloseable {
         return null;
     }
 
-    /** Read inbound frames, discarding payloads; respond to ping, return on close/EOF. */
-    private void drainUntilClose(InputStream in) throws IOException {
+    /**
+     * Read inbound frames, discarding data payloads; answer ping with pong, return on close/EOF.
+     *
+     * <p>RFC 6455 requires a pong carrying the ping's payload, so a ping's payload is unmasked and
+     * echoed rather than discarded. (Earlier revisions documented this behaviour but did not
+     * implement it, which left browser keep-alives unanswered.)
+     */
+    private void drainUntilClose(InputStream in, Client client) throws IOException {
         while (running) {
             int b0 = in.read();
             if (b0 == -1) {
@@ -194,11 +213,20 @@ public final class WebSocketFeedServer implements AutoCloseable {
                     mask[i] = (byte) readByte(in);
                 }
             }
+            // Control-frame payloads are capped at 125 bytes by RFC 6455; only keep those.
+            boolean keep = opcode == 0x9 && len <= 125;
+            byte[] payload = keep ? new byte[(int) len] : null;
             for (long i = 0; i < len; i++) {
-                readByte(in);
+                int b = readByte(in);
+                if (keep) {
+                    payload[(int) i] = (byte) (masked ? (b ^ (mask[(int) (i % 4)] & 0xFF)) : b);
+                }
             }
             if (opcode == 0x8) { // close
                 return;
+            }
+            if (opcode == 0x9) { // ping
+                client.sendPong(payload == null ? new byte[0] : payload);
             }
         }
     }
@@ -267,7 +295,17 @@ public final class WebSocketFeedServer implements AutoCloseable {
 
         synchronized void send(String text) {
             try {
-                out.write(textFrame(text));
+                out.write(frame(0x1, text.getBytes(StandardCharsets.UTF_8)));
+                out.flush();
+            } catch (IOException e) {
+                close();
+            }
+        }
+
+        /** Answer a client ping, echoing its payload as RFC 6455 requires. */
+        synchronized void sendPong(byte[] payload) {
+            try {
+                out.write(frame(0xA, payload));
                 out.flush();
             } catch (IOException e) {
                 close();
@@ -282,18 +320,18 @@ public final class WebSocketFeedServer implements AutoCloseable {
             }
         }
 
-        /** Encode an unmasked server→client text frame (FIN=1, opcode=0x1). */
-        private static byte[] textFrame(String text) {
-            byte[] payload = text.getBytes(StandardCharsets.UTF_8);
+        /** Encode a single unmasked, unfragmented server→client frame (FIN=1) of the given opcode. */
+        private static byte[] frame(int opcode, byte[] payload) {
+            byte b0 = (byte) (0x80 | (opcode & 0x0F));
             int n = payload.length;
             byte[] header;
             if (n < 126) {
-                header = new byte[] {(byte) 0x81, (byte) n};
+                header = new byte[] {b0, (byte) n};
             } else if (n <= 0xFFFF) {
-                header = new byte[] {(byte) 0x81, 126, (byte) (n >> 8), (byte) n};
+                header = new byte[] {b0, 126, (byte) (n >> 8), (byte) n};
             } else {
                 header = new byte[10];
-                header[0] = (byte) 0x81;
+                header[0] = b0;
                 header[1] = 127;
                 for (int i = 0; i < 8; i++) {
                     header[9 - i] = (byte) (n >>> (8 * i));

@@ -39,4 +39,12 @@ public final class MarketDataCache {
     public Optional<BigDecimal> lastPrice(String symbol) {
         return Optional.ofNullable(lastPrice.get(symbol));
     }
+
+    /**
+     * A snapshot of the last traded price per symbol, sorted by symbol — the console's last-sale
+     * ticker and the mark source for mark-to-market P&amp;L (docs/DESIGN.md §6).
+     */
+    public java.util.SortedMap<String, BigDecimal> lastPrices() {
+        return java.util.Collections.unmodifiableSortedMap(new java.util.TreeMap<>(lastPrice));
+    }
 }

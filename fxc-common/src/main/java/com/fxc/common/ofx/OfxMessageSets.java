@@ -9,7 +9,7 @@ package com.fxc.common.ofx;
  * fields) is finalized during FxcBroker implementation (Phase 2). Only the identifiers are pinned
  * here so both broker and investor agree on names.
  *
- * <p><b>OFX4J constraint (DESIGN §6.4):</b> OFX4J's unmarshaller only resolves aggregate classes
+ * <p><b>OFX4J constraint (DESIGN §7.4):</b> OFX4J's unmarshaller only resolves aggregate classes
  * under {@code com.webcohesion.ofx4j.*}, so any <i>inbound</i> custom aggregate must live in that
  * package namespace — otherwise the message set is marshal-only (outbound).
  */

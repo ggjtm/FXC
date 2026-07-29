@@ -1,0 +1,15 @@
+# Build context for docker/locust/Dockerfile is the repo root (the harness lives in loadgen/), so
+# keep the context small — without this, every build ships .git and every build/ directory.
+.git/
+.gradle/
+build/
+*/build/
+.idea/
+.reference/
+.vscode/
+.venv/
+**/__pycache__/
+**/*.py[cod]
+**/*.log
+.DS_Store
+gridgain-license.xml

@@ -73,25 +73,30 @@ public final class ArchiveService {
 
     private int archiveExecutions(long now) {
         List<List<?>> rows = query(
-                "SELECT e.exec_id, e.client_order_id, e.symbol, e.side, e.last_qty, e.last_px, e.cum_qty, e.status "
+                "SELECT e.exec_id, e.client_order_id, e.account_number, e.symbol, e.side, "
+                        + "e.last_qty, e.last_px, e.cum_qty, e.status, e.ts "
                         + "FROM EXECUTION e JOIN CLIENT_ORDER o ON e.client_order_id = o.client_order_id "
                         + "WHERE o.status IN ('FILLED', 'CANCELLED', 'REJECTED')");
         if (rows.isEmpty()) {
             return 0;
         }
         String insert = "INSERT INTO EXECUTION_ARCHIVE "
-                + "(exec_id, client_order_id, symbol, side, last_qty, last_px, cum_qty, status, archived_at) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE archived_at = VALUES(archived_at)";
+                + "(exec_id, client_order_id, account_number, symbol, side, last_qty, last_px, cum_qty, "
+                + "status, ts, archived_at) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + "ON DUPLICATE KEY UPDATE archived_at = VALUES(archived_at)";
         insertBatch(insert, rows, (ps, r) -> {
             ps.setString(1, str(r, 0));
             ps.setString(2, str(r, 1));
             ps.setString(3, str(r, 2));
             ps.setString(4, str(r, 3));
-            ps.setBigDecimal(5, dec(r, 4));
+            ps.setString(5, str(r, 4));
             ps.setBigDecimal(6, dec(r, 5));
             ps.setBigDecimal(7, dec(r, 6));
-            ps.setString(8, str(r, 7));
-            ps.setLong(9, now);
+            ps.setBigDecimal(8, dec(r, 7));
+            ps.setString(9, str(r, 8));
+            ps.setLong(10, ((Number) r.get(9)).longValue());
+            ps.setLong(11, now);
         });
         deleteById("EXECUTION", "exec_id", rows);
         return rows.size();

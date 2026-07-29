@@ -33,7 +33,7 @@ integration test across the actual `Main`s), not per-component defaults that can
 
 ## B1 — OFX4J server side is thin — **RESOLVED (Phase 2)**
 
-Root PROBLEMS.md P3 / DESIGN §6.5. Confirmed: we bypass the Jakarta `OFXServlet` and drive
+Root PROBLEMS.md P3 / DESIGN §7.5. Confirmed: we bypass the Jakarta `OFXServlet` and drive
 `AggregateMarshaller`/`AggregateUnmarshaller` from our own `com.sun.net.httpserver` handler
 (`OfxHttpServer` + `OfxCodec`), hand-building every response aggregate in `OfxService`. Gotcha
 found: **`OFXV2Writer` buffers and only flushes trailing close-tags on `close()`** — marshalling
@@ -43,7 +43,7 @@ aggregate must be fully populated.
 
 ## B2 — Custom order-entry aggregates are package-locked — **RESOLVED (Phase 2)**
 
-Root PROBLEMS.md P4 / DESIGN §6.4. Placed the `FXCORDMSGSRQV1`/`RSV1` aggregates under
+Root PROBLEMS.md P4 / DESIGN §7.4. Placed the `FXCORDMSGSRQV1`/`RSV1` aggregates under
 `com.webcohesion.ofx4j.domain.data.fxc` (in FxcBroker) so the introspector's package scan resolves
 them on unmarshal. Verified by `OfxOrderRoundTripTest` (envelope marshal → unmarshal preserves all
 fields). They reuse the `investment` `MessageSetType` slot (no collision — order and statement
@@ -52,7 +52,7 @@ order *response*; relocate them to a shared location (fxc-common or fxc-grid-sty
 
 ## B3 — FX positions in OFX are awkward — **OPEN**
 
-Root PROBLEMS.md / DESIGN §6.6. Equities map natively to `POSSTOCK`/`STOCKINFO` (CUSIP); FX pairs
+Root PROBLEMS.md / DESIGN §7.6. Equities map natively to `POSSTOCK`/`STOCKINFO` (CUSIP); FX pairs
 map to `POSOTHER`/`OtherPosition` with a synthetic `SECID` (e.g. `UNIQUEID=FX:EURUSD`). Confirm the
 mapping renders sensibly in a real OFX client during Phase 2.
 
@@ -64,7 +64,7 @@ and can proceed with a stub receiver. Sequence the XMPP leg after the Tigase dec
 
 ## B5 — Static dev credentials — **OPEN (low)**
 
-OFX signon uses static dev credentials initially (root DESIGN §6.7 auth realism). Fine for the demo.
+OFX signon uses static dev credentials initially (root DESIGN §7.7 auth realism). Fine for the demo.
 
 ## B6 — HTTP transport for OFX — **RESOLVED (Phase 2)**
 

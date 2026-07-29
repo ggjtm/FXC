@@ -10,9 +10,13 @@ import com.fxc.broker.model.Side;
 import com.fxc.common.instrument.Instrument;
 import com.fxc.common.instrument.InstrumentCatalog;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 /**
  * Order management (docs/DESIGN.md §4.2): validates client orders against {@link AccountService},
@@ -26,11 +30,24 @@ public final class OmsService {
     private final BrokerRepository repository;
     private final Map<String, Instrument> instruments;
     private final Map<String, ClientOrder> orders = new ConcurrentHashMap<>();
+    private final List<FillListener> fillListeners = new CopyOnWriteArrayList<>();
+    private final LongSupplier clock;
+    private final AtomicLong routed = new AtomicLong();
+    private final AtomicLong fills = new AtomicLong();
+    private final AtomicLong rejected = new AtomicLong();
     private OrderRouter router;
+    /** Operator switch behind the console's start/stop trading control (docs/DESIGN.md §6). */
+    private volatile boolean tradingEnabled = true;
 
     public OmsService(AccountService accountService, BrokerRepository repository) {
+        this(accountService, repository, System::currentTimeMillis);
+    }
+
+    /** Test/DI constructor with an injectable execution-timestamp clock (epoch millis). */
+    public OmsService(AccountService accountService, BrokerRepository repository, LongSupplier clock) {
         this.accountService = accountService;
         this.repository = repository;
+        this.clock = clock;
         this.instruments = InstrumentCatalog.bySymbol();
     }
 
@@ -38,9 +55,42 @@ public final class OmsService {
         this.router = router;
     }
 
+    /** Notified after each fill is applied — the P&amp;L series is built from this. */
+    public void addFillListener(FillListener listener) {
+        fillListeners.add(listener);
+    }
+
+    /**
+     * Stop or resume accepting new client orders. Independent of the exchange's own market state: the
+     * broker can stand down while the exchange stays open.
+     */
+    public void setTradingEnabled(boolean enabled) {
+        this.tradingEnabled = enabled;
+    }
+
+    public boolean tradingEnabled() {
+        return tradingEnabled;
+    }
+
+    public long ordersRouted() {
+        return routed.get();
+    }
+
+    public long fillCount() {
+        return fills.get();
+    }
+
+    public long rejectCount() {
+        return rejected.get();
+    }
+
     /** Validate, persist, and route a new client order. */
     public synchronized OrderResult submit(String account, String clientOrderId, String symbol,
                                            Side side, OrderType type, BigDecimal price, BigDecimal quantity) {
+        if (!tradingEnabled) {
+            return reject(new ClientOrder(clientOrderId, account, symbol, side, type, price, quantity),
+                    "trading stopped by operator");
+        }
         Instrument instrument = instruments.get(symbol);
         if (instrument == null) {
             return reject(new ClientOrder(clientOrderId, account, symbol, side, type, price, quantity),
@@ -67,6 +117,7 @@ public final class OmsService {
         router.route(order);
         order.setStatus(OrderStatus.ROUTED);
         repository.upsertOrder(order);
+        routed.incrementAndGet();
         return OrderResult.accepted(order);
     }
 
@@ -89,10 +140,17 @@ public final class OmsService {
         }
         if (isFill && lastQty != null && lastQty.signum() > 0) {
             Instrument instrument = instruments.get(order.symbol());
+            long ts = clock.getAsLong();
             order.applyFill(lastQty, lastPx);
             accountService.applyFill(order.account(), instrument, order.side(), lastQty, lastPx);
-            repository.insertExecution(new Execution(execId, clientOrderId, order.symbol(),
-                    order.side(), lastQty, lastPx, order.cumQty(), order.status()));
+            repository.insertExecution(new Execution(execId, clientOrderId, order.account(), order.symbol(),
+                    order.side(), lastQty, lastPx, order.cumQty(), order.status(), ts));
+            fills.incrementAndGet();
+            // After the position is updated, so a listener sees post-fill balances. An equity sell
+            // leaves avg_price untouched, which is what makes the cost basis still readable here.
+            for (FillListener listener : fillListeners) {
+                listener.onFill(order.account(), instrument, order.side(), lastQty, lastPx, ts);
+            }
         }
         repository.upsertOrder(order);
     }
@@ -106,6 +164,7 @@ public final class OmsService {
         order.setRejectReason(reason);
         orders.put(order.clientOrderId(), order);
         repository.upsertOrder(order);
+        rejected.incrementAndGet();
         return OrderResult.rejected(order, reason);
     }
 }

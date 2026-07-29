@@ -32,3 +32,24 @@ if echo "${OUT}" | grep -qiE 'Tigase XMPP Server \(Core\).*error'; then
   exit 1
 fi
 echo "[tigase-init] schema load OK."
+
+# The account step is reported separately by the schema tool, and used to be invisible here: this
+# script only checked the Core-schema line, so "Adding XMPP admin accounts   error" passed as
+# "schema load OK" and the failure resurfaced much later as a Smack SASL `not-authorized` in
+# whichever component logged on first (root PROBLEMS.md P9).
+#
+# It is a WARNING rather than a hard failure on purpose: on an already-provisioned volume the tool
+# reports this step as "error / Database schema is invalid" every time even though the accounts are
+# present and working, so failing here would break every idempotent re-run of `docker compose up`.
+if echo "${OUT}" | grep -qiE 'Adding XMPP admin accounts[[:space:]]*error'; then
+  echo "[tigase-init] WARNING: the schema tool did NOT provision the service accounts this run."
+  echo "[tigase-init]   Expected accounts: ${SVC_ACCOUNTS}"
+  echo "[tigase-init]   Expected password: the shared dev password (TIGASE_SVC_PASS)"
+  echo "[tigase-init]   On an existing volume this is normal — the accounts were created on first"
+  echo "[tigase-init]   load and are unchanged. On a FRESH volume it means no account exists, and"
+  echo "[tigase-init]   components will fail at logon with 'SCRAM-SHA-1: not-authorized'. Verify:"
+  echo "[tigase-init]     docker exec fxc-mariadb mariadb -utigase -ptigase tigasedb \\"
+  echo "[tigase-init]       -e \"SELECT user_id FROM tig_users WHERE user_id LIKE '%fxc.local';\""
+else
+  echo "[tigase-init] service accounts provisioned: ${SVC_ACCOUNTS}"
+fi

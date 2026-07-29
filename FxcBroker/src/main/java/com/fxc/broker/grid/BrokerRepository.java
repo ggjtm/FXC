@@ -62,10 +62,26 @@ public final class BrokerRepository {
     }
 
     public void insertExecution(Execution e) {
-        run("MERGE INTO EXECUTION (exec_id, client_order_id, symbol, side, last_qty, last_px, cum_qty, status) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                e.execId(), e.clientOrderId(), e.symbol(), e.side().name(),
-                e.lastQty(), e.lastPx(), e.cumQty(), e.status().name());
+        run("MERGE INTO EXECUTION (exec_id, client_order_id, account_number, symbol, side, "
+                        + "last_qty, last_px, cum_qty, status, ts) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                e.execId(), e.clientOrderId(), e.account(), e.symbol(), e.side().name(),
+                e.lastQty(), e.lastPx(), e.cumQty(), e.status().name(), e.ts());
+    }
+
+    /** An account as stored, for the console's account list. */
+    public record AccountRow(String accountNumber, String ownerName, String baseCurrency) {
+    }
+
+    /** Every account, ordered by number — the console's account list and P&amp;L series keys. */
+    public List<AccountRow> accounts() {
+        List<List<?>> rows = sql.query(new SqlFieldsQuery(
+                "SELECT account_number, owner_name, base_ccy FROM ACCOUNT ORDER BY account_number")).getAll();
+        List<AccountRow> accounts = new ArrayList<>();
+        for (List<?> row : rows) {
+            accounts.add(new AccountRow((String) row.get(0), (String) row.get(1), (String) row.get(2)));
+        }
+        return accounts;
     }
 
     private void run(String dml, Object... args) {

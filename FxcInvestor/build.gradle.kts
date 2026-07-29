@@ -1,9 +1,11 @@
 plugins {
     application
-    // Opt-in performance / bulk-simulation harness (docs/stories/005). Adds the `gatling` source set
-    // (src/gatling/java) and the `gatlingRun` task; NOT part of the default build/test/check.
-    id("io.gatling.gradle") version "3.13.5"
 }
+
+// The load harness is no longer a Gradle concern. It lives in `loadgen/` as a standalone Python +
+// Locust tool (docs/stories/006), invoked by scripts/demo.sh or scripts/loadtest.sh — deliberately
+// outside the build, so `./gradlew build` is unaffected by it. The retired Gatling harness could not
+// start, stop, or re-rate a run in progress; Locust's web UI can.
 
 // FxcInvestor does NOT embed GridGain — MariaDB is its primary store (docs/DESIGN.md §3.2/§4.4),
 // so it needs neither the GridGain dependency nor the Ignite --add-opens JVM flags.
@@ -29,11 +31,6 @@ dependencies {
     testImplementation(project(":FxcBroker"))
     testImplementation(project(":FxcPub"))
     testImplementation(libs.bundles.quickfixj)
-
-    // The Gatling simulation reuses the investor's production strategy + OFX request-building and
-    // the shared OFX contract (fxc-common). Gatling itself is provided by the plugin.
-    gatlingImplementation(project(":fxc-common"))
-    gatlingImplementation(sourceSets["main"].output)
 }
 
 application {

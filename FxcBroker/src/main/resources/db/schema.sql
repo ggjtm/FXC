@@ -8,8 +8,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
     applied_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO schema_version (component, version) VALUES ('fxc_broker', 1)
-    ON DUPLICATE KEY UPDATE version = 1;
+-- v2: EXECUTION_ARCHIVE gained account_number + ts for the console's per-account P&L series
+-- (docs/DESIGN.md §6).
+INSERT INTO schema_version (component, version) VALUES ('fxc_broker', 2)
+    ON DUPLICATE KEY UPDATE version = 2;
 
 CREATE TABLE IF NOT EXISTS CLIENT_ORDER_ARCHIVE (
     client_order_id   VARCHAR(64)    NOT NULL PRIMARY KEY,
@@ -30,11 +32,20 @@ CREATE TABLE IF NOT EXISTS CLIENT_ORDER_ARCHIVE (
 CREATE TABLE IF NOT EXISTS EXECUTION_ARCHIVE (
     exec_id          VARCHAR(64)    NOT NULL PRIMARY KEY,
     client_order_id  VARCHAR(64)    NOT NULL,
+    account_number   VARCHAR(64)    NOT NULL DEFAULT '',
     symbol           VARCHAR(32)    NOT NULL,
     side             VARCHAR(8)     NOT NULL,
     last_qty         DECIMAL(28, 8) NOT NULL,
     last_px          DECIMAL(20, 8) NOT NULL,
     cum_qty          DECIMAL(28, 8) NOT NULL,
     status           VARCHAR(20)    NOT NULL,
-    archived_at      BIGINT         NOT NULL
+    ts               BIGINT         NOT NULL DEFAULT 0,
+    archived_at      BIGINT         NOT NULL,
+    INDEX idx_execution_archive_account_ts (account_number, ts)
 );
+
+-- v1 -> v2 for a database that already exists: CREATE TABLE IF NOT EXISTS above is a no-op there,
+-- so the two new columns have to be added explicitly. Both forms are idempotent.
+ALTER TABLE EXECUTION_ARCHIVE ADD COLUMN IF NOT EXISTS account_number VARCHAR(64) NOT NULL DEFAULT '';
+ALTER TABLE EXECUTION_ARCHIVE ADD COLUMN IF NOT EXISTS ts BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE EXECUTION_ARCHIVE ADD INDEX IF NOT EXISTS idx_execution_archive_account_ts (account_number, ts);

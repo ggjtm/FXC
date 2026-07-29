@@ -10,6 +10,8 @@ import com.fxc.exchange.fix.ExchangeServer;
 import com.fxc.investor.ofx.OfxBrokerClient;
 import com.fxc.investor.strategy.MarketView;
 import com.fxc.investor.strategy.OrderIntent;
+import com.fxc.investor.strategy.SamplingStrategy;
+import com.fxc.investor.strategy.BookerSampler;
 import com.fxc.investor.strategy.PortfolioView;
 import com.fxc.investor.strategy.Strategies;
 import com.fxc.investor.strategy.Strategy;
@@ -136,7 +138,12 @@ class BookRelayIntegrationTest {
             MarketView market = new MarketView();
             market.setLastSale("ACME", new BigDecimal("42.10"));
             market.setBook("ACME", book);
-            Strategy booker = Strategies.byName("booker");
+            // The bare sampler, not Strategies.byName("booker"): what is under test here is price
+            // selection from the relayed book. byName now wraps booker in LiquidityAwareStrategy,
+            // which needs real holdings and clamps *quantity* — irrelevant to this assertion, and it
+            // would decline every SELL because this account is seeded with cash but no shares. The
+            // policy has its own tests (LiquidityAwareStrategyTest).
+            Strategy booker = new SamplingStrategy("booker", new BookerSampler());
             Random rng = new Random(7);
             for (int i = 0; i < 40; i++) {
                 Optional<OrderIntent> decision = booker.decide("ACME", market, PortfolioView.empty(), rng);

@@ -12,4 +12,8 @@ Status: proposed | in-progress | done
 Relates to: PLAN item / DESIGN §
 ```
 
-No stories filed yet.
+## Filed
+
+- [001 — shared web toolkit](001-shared-web-toolkit.md): the pieces both component consoles share
+  (root DESIGN §6.1) — `com.fxc.common.web` (`Json`, `HttpJson`, `StaticAssets`) plus the
+  classpath-served `web/common/` theme, hover menu, D3 status indicator and vendored D3 bundle.

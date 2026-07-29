@@ -5,6 +5,7 @@ import com.fxc.exchange.book.OrderBook;
 import com.fxc.exchange.book.Trade;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -54,6 +55,15 @@ public final class MarketDataService implements ExchangeListener {
             publisher.publishSnapshot(target, mdReqId, symbol,
                     bids(symbol, depth), asks(symbol, depth), lastSale.get(symbol));
         }
+    }
+
+    /**
+     * The last executed price/size for a symbol, if it has traded. Until the demo console needed a
+     * last-sale readout this was reachable only through a FIX snapshot; the exchange's REST status
+     * endpoint and the broker's ticker both read it from here.
+     */
+    public Optional<OrderBook.Level> lastSale(String symbol) {
+        return Optional.ofNullable(lastSale.get(symbol));
     }
 
     /** Send a fresh snapshot to every subscriber of a symbol (e.g. after book changes). */

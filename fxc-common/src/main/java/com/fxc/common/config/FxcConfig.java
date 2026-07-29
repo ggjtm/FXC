@@ -22,6 +22,12 @@ import java.util.Properties;
  * <p>Kept deliberately dependency-free (no HOCON library) — the config files are simple
  * {@link Properties}-parseable {@code key=value} text. A richer format can be swapped in later
  * without changing call sites.
+ *
+ * <p><b>Comment syntax is {@link Properties}', not HOCON's:</b> {@code #} starts a comment only at
+ * the beginning of a line. A trailing {@code key = value   # note} does <b>not</b> strip the note —
+ * it becomes part of the value, and the failure surfaces far away as whatever the caller does with
+ * it (`new BigDecimal(...)` throwing about exponent marks, say). Keep comments on their own lines in
+ * {@code conf/*.conf}; see root PROBLEMS.md P10.
  */
 public final class FxcConfig {
 

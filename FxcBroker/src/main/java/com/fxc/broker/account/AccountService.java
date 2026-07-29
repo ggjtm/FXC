@@ -129,6 +129,11 @@ public final class AccountService {
         return positions.values().stream().filter(p -> p.account().equals(account)).toList();
     }
 
+    /** Every account, ordered by number — the console's account list and P&amp;L series keys. */
+    public List<BrokerRepository.AccountRow> accounts() {
+        return repository.accounts();
+    }
+
     public synchronized BigDecimal balance(String account, String currency) {
         Position p = positions.get(Position.keyOf(account, HoldingType.CASH, currency));
         return p == null ? BigDecimal.ZERO : p.quantity();

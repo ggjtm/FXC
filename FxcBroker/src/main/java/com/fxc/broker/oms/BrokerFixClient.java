@@ -111,6 +111,11 @@ public final class BrokerFixClient extends MessageCracker implements Application
         return logon.await(timeout, unit);
     }
 
+    /** Whether the exchange session is established — shown on the broker console's status pane. */
+    public boolean isLoggedOn() {
+        return exchangeSession != null;
+    }
+
     @Override
     public void close() {
         initiator.stop();

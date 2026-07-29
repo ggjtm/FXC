@@ -1,0 +1,316 @@
+/*
+ * FXC console design system — shared by every component's controller/monitor UI
+ * (docs/DESIGN.md §6). Served from the fxc-common jar at /common/fxc.css so both
+ * consoles are visually one product.
+ *
+ * Dark-only by requirement (§6.3), so the palette uses dark-selected steps rather
+ * than flipping a light one. Every colour below was validated against this file's
+ * own --surface (#16181d), not assumed:
+ *   - categorical slots 1-8: lightness band, chroma floor, adjacent CVD (worst
+ *     dE 8.4 protan), normal-vision floor (19.3) and >=3:1 contrast all pass.
+ *   - candle up/down: dE 8.2 deutan — clears the 8.0 target but only just, so
+ *     candle bodies carry a *shape* channel too (hollow = up, filled = down);
+ *     direction is never colour-alone.
+ *   - status steps are a reserved set, deliberately not categorical; they are held
+ *     to contrast (5.29 / 9.68 / 6.73 / 3.70 : 1) and are always rendered with a
+ *     text label, never colour alone.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces & ink */
+  --surface: #16181d;      /* page + chart surface (the validated surface) */
+  --panel: #1e2128;
+  --panel2: #262a33;
+  --border: #333844;
+  --grid: #23262e;         /* hairline gridline, one shade off the surface */
+  --text: #d6dae2;
+  --muted: #8b93a1;
+  --accent: #3584e4;
+
+  /* Price direction (polarity). Paired with hollow/filled bodies — see above. */
+  --up: #26a269;
+  --down: #e01b24;
+
+  /* Status — reserved; never reused as a series colour. Always with a label. */
+  --status-good: #0ca30c;
+  --status-warn: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
+  /* Categorical series, fixed order, never cycled. Assigned per entity. */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--surface);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ---------- Header ---------- */
+
+.fxc-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.fxc-brand { font-weight: 700; letter-spacing: .01em; white-space: nowrap; }
+.fxc-brand .fxc-sub { font-weight: 400; color: var(--muted); margin-left: 7px; }
+
+/* ---------- Mouseover dropdown of controls (§6.4) ---------- */
+
+.fxc-menu { position: relative; }
+
+.fxc-menu-btn {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fxc-menu:hover .fxc-menu-btn,
+.fxc-menu:focus-within .fxc-menu-btn { border-color: var(--accent); }
+
+.fxc-menu-panel {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  min-width: 232px;
+  margin-top: 4px;
+  padding: 5px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+}
+
+/* Hover opens it; focus-within keeps it keyboard-reachable. */
+.fxc-menu:hover .fxc-menu-panel,
+.fxc-menu:focus-within .fxc-menu-panel { display: block; }
+
+/* Escape sets this; cleared on mouseleave so hover works again afterwards. */
+.fxc-menu.is-dismissed:hover .fxc-menu-panel { display: none; }
+
+.fxc-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--text);
+  font: inherit;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.fxc-menu-item:hover:not(:disabled) { background: rgba(255, 255, 255, .07); }
+.fxc-menu-item:disabled { color: var(--muted); cursor: default; }
+.fxc-menu-item[data-danger] { color: var(--status-serious); }
+.fxc-menu-item.is-confirming { background: rgba(208, 59, 59, .18); color: var(--status-critical); font-weight: 600; }
+.fxc-menu-sep { height: 1px; margin: 5px 4px; background: var(--border); }
+.fxc-menu-label {
+  padding: 6px 9px 3px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+/* ---------- Status strip (D3-rendered) ---------- */
+
+.fxc-status { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+.fxc-status-state { display: flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
+.fxc-status-state .fxc-glyph { font-size: 11px; line-height: 1; }
+.fxc-status-metrics { display: flex; align-items: center; gap: 14px; color: var(--muted); white-space: nowrap; }
+.fxc-status-metrics b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Banner ---------- */
+
+.fxc-banner {
+  display: none;
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  background: #3a1416;
+  color: #ffb3b6;
+  border-bottom: 1px solid #5a1e22;
+  font-size: 12px;
+}
+
+/* ---------- Toolbar (per-component view controls) ---------- */
+
+.fxc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.fxc-field { display: flex; flex-direction: column; gap: 3px; }
+.fxc-field label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+select, input, .fxc-btn {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+input[type="datetime-local"] { color-scheme: dark; }
+
+.fxc-btn { cursor: pointer; background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 6px 16px; }
+.fxc-btn:hover { filter: brightness(1.1); }
+.fxc-hint { font-size: 10px; color: var(--muted); }
+
+.fxc-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.fxc-toggle button {
+  background: var(--panel2);
+  color: var(--muted);
+  border: none;
+  padding: 5px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.fxc-toggle button.is-active { background: var(--accent); color: #fff; }
+
+/* ---------- Main pane ---------- */
+
+.fxc-main { position: relative; flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.fxc-plot { flex: 1 1 auto; min-height: 0; }
+.fxc-plot svg { display: block; width: 100%; height: 100%; }
+
+.fxc-empty {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 15px;
+  pointer-events: none;
+}
+
+/* Hold the previous render at reduced opacity on refetch — no skeleton flash. */
+.fxc-plot.is-loading svg { opacity: .55; transition: opacity .15s; }
+
+/* Chart chrome: solid recessive hairlines, never dashed. */
+.fxc-grid line { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.fxc-axis line, .fxc-axis path { stroke: var(--border); stroke-width: 1; shape-rendering: crispEdges; }
+.fxc-axis text { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.fxc-crosshair line { stroke: var(--muted); stroke-width: 1; stroke-opacity: .55; pointer-events: none; }
+
+/* ---------- Tooltip ---------- */
+
+.fxc-tooltip {
+  position: absolute;
+  display: none;
+  z-index: 30;
+  pointer-events: none;
+  min-width: 132px;
+  padding: 7px 9px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .45);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.fxc-tooltip .fxc-tt-title { font-weight: 700; margin-bottom: 3px; }
+.fxc-tooltip dl { display: grid; grid-template-columns: auto auto; gap: 1px 12px; margin: 0; }
+.fxc-tooltip dt { color: var(--muted); }
+.fxc-tooltip dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Legend (always present for >=2 series) ---------- */
+
+.fxc-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 7px 14px; border-top: 1px solid var(--border); }
+.fxc-legend-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.fxc-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; }
+.fxc-legend-item b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ---------- Table view (the accessible twin of every chart) ---------- */
+
+.fxc-table-wrap { max-height: 34%; overflow: auto; border-top: 1px solid var(--border); }
+.fxc-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fxc-table th, .fxc-table td { padding: 5px 10px; text-align: right; white-space: nowrap; }
+.fxc-table th {
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  border-bottom: 1px solid var(--border);
+}
+.fxc-table td { font-variant-numeric: tabular-nums; border-bottom: 1px solid var(--grid); }
+.fxc-table th:first-child, .fxc-table td:first-child { text-align: left; }
+.fxc-table .fxc-up { color: var(--up); }
+.fxc-table .fxc-down { color: var(--down); }
+
+/* ---------- Last-sale ticker ---------- */
+
+.fxc-ticker {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 26px;
+  overflow-x: auto;
+  padding: 8px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fxc-tick { display: flex; align-items: baseline; gap: 7px; }
+.fxc-tick .fxc-sym { color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+.fxc-tick .fxc-px { font-weight: 600; }
+.fxc-tick .fxc-arrow { font-size: 10px; }
+.fxc-tick.is-up .fxc-px, .fxc-tick.is-up .fxc-arrow { color: var(--up); }
+.fxc-tick.is-down .fxc-px, .fxc-tick.is-down .fxc-arrow { color: var(--down); }
+
+.fxc-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

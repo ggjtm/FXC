@@ -45,7 +45,7 @@ import java.util.TreeSet;
  * and the custom order-entry message set (routes to {@link OmsService}). This is all application
  * code — OFX4J's server contract is just marshalling (PROBLEMS.md B1).
  *
- * <p>Statement mapping (DESIGN §6.6): equities → native {@link StockPosition}; the home currency
+ * <p>Statement mapping (DESIGN §7.6): equities → native {@link StockPosition}; the home currency
  * ({@code USD}) balance → {@link InvestmentBalance#setAvailableCash}; other currency balances →
  * {@link OtherPosition} FX pseudo-securities with a synthetic {@code FX:CCY} security id.
  */
@@ -186,7 +186,7 @@ public final class OfxService {
 
     private OtherPosition fxPosition(Position p) {
         OtherPosition position = new OtherPosition();
-        // Synthetic FX security id per DESIGN §6.6 (per-currency for a cash FX book).
+        // Synthetic FX security id per DESIGN §7.6 (per-currency for a cash FX book).
         position.setInvestmentPosition(investmentPosition(
                 securityId(FX_PREFIX + p.instrument(), FX_ID_TYPE), p.quantity(), BigDecimal.ONE));
         return position;

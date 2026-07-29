@@ -18,14 +18,27 @@ import java.util.concurrent.Executors;
  */
 public final class OfxHttpServer implements AutoCloseable {
 
+    /**
+     * Request threads by default. This is the hard ceiling on OFX throughput, so it is the single
+     * highest-leverage knob for load work — the load harness ({@code loadgen/}) can generate far more
+     * concurrency than four threads will serve, and everything queues behind them. Raised via
+     * {@code ofx.http.threads}.
+     */
+    public static final int DEFAULT_THREADS = 4;
+
     private final HttpServer server;
     private final String path;
 
     public OfxHttpServer(String host, int port, String path, OfxService service) throws IOException {
+        this(host, port, path, service, DEFAULT_THREADS);
+    }
+
+    public OfxHttpServer(String host, int port, String path, OfxService service, int threads)
+            throws IOException {
         this.path = path;
         this.server = HttpServer.create(new InetSocketAddress(host, port), 0);
         this.server.createContext(path, exchange -> handle(exchange, service));
-        this.server.setExecutor(Executors.newFixedThreadPool(4));
+        this.server.setExecutor(Executors.newFixedThreadPool(Math.max(1, threads)));
     }
 
     public void start() {

@@ -1,13 +1,17 @@
-package com.fxc.exchange.feed;
+package com.fxc.common.web;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.Function;
 
 /**
- * Minimal JSON writer for the feed service — the exchange has no JSON library dependency (like the
- * OFX/FIX layers it stays framework-free). Emits just what the REST/WebSocket payloads need:
- * objects, arrays, strings, numbers. Not a general-purpose serializer.
+ * Minimal JSON writer for the components' REST/WebSocket payloads — FXC has no JSON library
+ * dependency (like the OFX/FIX layers it stays framework-free, see docs/DESIGN.md §4.1). Emits just
+ * what the payloads need: objects, arrays, strings, numbers. Not a general-purpose serializer, and
+ * deliberately write-only: the control APIs take query parameters rather than request bodies so no
+ * parser is needed (docs/DESIGN.md §6).
+ *
+ * <p>Originally {@code com.fxc.exchange.feed.Json}; promoted here when FxcBroker gained a web UI.
  */
 public final class Json {
 

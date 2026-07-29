@@ -63,6 +63,45 @@ services:
     volumes:
       - fxc-tigase-logs:/opt/tigase/logs
 
+  # Investor load harness (FxcInvestor/docs/stories/006), replacing the retired Gatling harness.
+  # Web UI on http://localhost:8089 — start/stop a run and change users or spawn rate WHILE it runs,
+  # which is the capability Gatling OSS lacked (its knobs froze at JVM start).
+  #
+  # Unlike the other services this one reaches OUT to the host: the four Java components run on the
+  # host via ./gradlew, so the broker's OFX endpoint is at host.docker.internal:8082. `extra_hosts`
+  # makes that name resolve on Linux too, where it is not automatic.
+  #
+  # Build context is the repo root (the harness source is in loadgen/), unlike tigase's own-directory
+  # context — see docker/locust/Dockerfile and .dockerignore.
+  locust:
+    build:
+      context: .
+      dockerfile: docker/locust/Dockerfile
+    image: fxc/locust:2.32.5
+    container_name: fxc-locust
+    ports:
+      - "8089:8089"   # Locust web UI — the workload control surface
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Target the broker's OFX endpoint on the host.
+      LOCUST_HOST: ${FXC_LOADGEN_HOST:-http://host.docker.internal:8082}
+      # Laptop-appropriate default: 8 users at ~1 order/1.5s ≈ 5 orders/sec aggregate. Raising it is
+      # an explicit action in the UI.
+      LOCUST_USERS: ${FXC_LOADGEN_USERS:-8}
+      LOCUST_SPAWN_RATE: ${FXC_LOADGEN_SPAWN_RATE:-2}
+      # Begin swarming on startup so the demo is continuous without needing a browser; the UI stays
+      # live for control. Set false to come up idle and start it by hand.
+      LOCUST_AUTOSTART: ${FXC_LOADGEN_AUTOSTART:-true}
+      FXC_ACCOUNTS: ${FXC_LOADGEN_ACCOUNTS:-000123456,000654321}
+      FXC_SYMBOLS: ${FXC_LOADGEN_SYMBOLS:-ACME}
+      # booker, not rando, for the same reason scripts/demo.sh defaults its agents to booker: the
+      # liquidity-managed strategies scale buying to cash and sell to keep a cash floor, so the flow
+      # is sustainable indefinitely. rando is naive by design and a continuous run of it just
+      # exhausts one side of the account and degrades into rejections.
+      FXC_STRATEGY: ${FXC_LOADGEN_STRATEGY:-booker}
+    restart: unless-stopped
+
 volumes:
   fxc-mariadb-data:
   fxc-tigase-logs:

@@ -12,7 +12,7 @@ Your task is to implement a system of independent agents which together simulate
 Vysper based XMPP server. All system components implement an XMPP client for communications not handled by a more formal protocol. Exchange status messages, Broker to Investor status messages, Investor to broker instructions (orders), and nonparticipants may send messages. Implemented as a GridGain 8 cluster service with a MariaDB backend for message archive history. 
 
 ## FxcInvestor
-The principal investor agent implementation. May run standalone or under Gatling. Speaks XMPP to FxcPub and OFX to FxcBroker. Provides an SPI for trade agents, and a few rudimentary trade agent implementations. Optionally speaks ITCH/OUCH to FxcBroker for order book and price data.
+The principal investor agent implementation. May run standalone or alongside the Locust load harness (loadgen/, docs/stories/006). Speaks XMPP to FxcPub and OFX to FxcBroker. Provides an SPI for trade agents, and a few rudimentary trade agent implementations. Optionally speaks ITCH/OUCH to FxcBroker for order book and price data.
 
 ## FxcBroker
 Provides OFX based reporting to investors and OMS trade execution via FIX to an exchange. Speaks ITCH/OUCH to proxy order book details to investors on behalf of an exchange. All other messaging is XMPP. Maintains investment account system of record and enforces cash balances.

@@ -19,10 +19,10 @@ Done (root PLAN Phase 0):
 
 ## Backlog / next
 
-- [ ] **Derivatives extension points** (DESIGN §6.3): add `OptionInstrument`/`FutureInstrument`,
+- [ ] **Derivatives extension points** (DESIGN §7.3): add `OptionInstrument`/`FutureInstrument`,
   new `AssetClass` values, and `SettlementProfile` styles (margining, expiry/exercise, MTM).
   Explicitly out of scope until the trading components need them.
-- [ ] **OFX order-entry aggregates** (DESIGN §6.4): the inbound custom aggregates must live under
+- [ ] **OFX order-entry aggregates** (DESIGN §7.4): the inbound custom aggregates must live under
   `com.webcohesion.ofx4j.*` (OFX4J unmarshaller is package-locked). Decide during FxcBroker (Phase 2)
   whether the shared constants stay here and the aggregate classes live in FxcBroker.
 - [ ] **Config format**: revisit if flat `key=value` proves limiting (HOCON was the original idea);
@@ -34,3 +34,12 @@ Done (root PLAN Phase 0):
 - No business logic (matching, OMS, clearing, timelines) — those live in the components.
 - No GridGain / MariaDB / QuickFIX-J / Smack dependencies leaking into common beyond what the
   shared model strictly needs.
+
+## Post-roadmap stories
+
+- **`docs/stories/001` — shared web toolkit — DONE.** Root DESIGN §6.1. New `com.fxc.common.web`
+  (`Json` promoted from `com.fxc.exchange.feed`, `HttpJson`, `StaticAssets`) plus classpath-served
+  `web/common/` assets: the dark theme, the hover control menu, the D3 status indicator, the
+  fetch/poll/socket helpers, and a **vendored** `d3.v7.min.js`. Still no new Gradle dependencies and
+  still no JSON *parser* — the control endpoints take query parameters with an empty body. Verified
+  by `StaticAssetsTest` (7), `JsonTest` (5).

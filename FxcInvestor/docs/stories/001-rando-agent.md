@@ -37,4 +37,4 @@ It is deterministic-testable by injecting the RNG seed.
   ([003](003-bookfish-agent.md)) refine the **price-target distribution** while keeping the same
   side/quantity behavior.
 - No market microstructure awareness — intentionally naive, useful as a liquidity/noise trader in
-  simulations ([005](005-gatling-multi-agent-runner.md)).
+  simulations ([006](006-locust-multi-agent-runner.md)).

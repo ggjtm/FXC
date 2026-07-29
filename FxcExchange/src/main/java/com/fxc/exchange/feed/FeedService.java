@@ -1,6 +1,7 @@
 package com.fxc.exchange.feed;
 
 import com.fxc.common.store.ColdStore;
+import com.fxc.exchange.control.ExchangeControlService;
 import java.util.function.LongSupplier;
 import org.apache.ignite.Ignite;
 
@@ -22,18 +23,32 @@ public final class FeedService implements AutoCloseable {
         this.httpServer = httpServer;
     }
 
+    /** Start all feed transports with history only — no control/status endpoints. */
+    public static FeedService start(Ignite ignite, ColdStore cold, LongSupplier clock,
+                                    String host, int httpPort, int wsPort) throws Exception {
+        return start(ignite, cold, clock, host, httpPort, wsPort, null, false);
+    }
+
     /**
      * Start all feed transports. {@code httpPort}/{@code wsPort} may be 0 to bind an ephemeral port
      * (tests); the bound ports are available via {@link #httpPort()} / {@link #wsPort()}.
+     *
+     * @param control         the console's control/status service, or {@code null} for history only
+     * @param controlsEnabled whether the mutating control endpoints are exposed
      */
     public static FeedService start(Ignite ignite, ColdStore cold, LongSupplier clock,
-                                    String host, int httpPort, int wsPort) throws Exception {
+                                    String host, int httpPort, int wsPort,
+                                    ExchangeControlService control, boolean controlsEnabled) throws Exception {
         WebSocketFeedServer ws = new WebSocketFeedServer(host, wsPort);
         ws.start();
         LiveFeed live = new LiveFeed(ws, clock);
         live.start();
+        if (control != null) {
+            control.setFeedMetrics(ws::connectionCount, live::tradesPerSec, live::totalTrades);
+        }
         CandleService candles = new CandleService(ignite, cold, clock);
-        FeedHttpServer http = new FeedHttpServer(host, httpPort, candles, ws.boundPort());
+        FeedHttpServer http = new FeedHttpServer(host, httpPort, candles, ws.boundPort(),
+                control, controlsEnabled);
         http.start();
         return new FeedService(ws, live, http);
     }

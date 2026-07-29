@@ -38,3 +38,16 @@ Delivered:
 
 - Broker connects here as a FIX **initiator** (order flow) — see FxcBroker Phase 2.
 - FxcPub receives **drop-copy** `ExecutionReport`s — see FxcPub Phase 3.
+
+## Post-roadmap stories
+
+- **`docs/stories/001` — exchange feeds — DONE.** FIX depth tiers + last sale, REST OHLCV candles,
+  live-ticker WebSocket, charting web UI.
+- **`docs/stories/002` — controller/monitor console — DONE.** Root DESIGN §6.2. Added the exchange's
+  first market-state primitive (`book/TradingSession`), order-book mass cancel
+  (`OrderBook.cancelAll` / `MatchingEngine.clearBook`) with FIX `CANCELED` reporting via
+  `control/CancelReporter`, and `control/ExchangeControlService` behind the console's status/control
+  REST endpoints. Chart rewritten in D3+SVG; live ticker gained a heartbeat and a real `pong`.
+  Controls gated by `feed.controls.enabled`. Verified by `TradingSessionTest` (7),
+  `MatchingEngineHaltTest` (14), `ExchangeControlApiTest` (2), `WebSocketFeedServerTest` (4),
+  `FeedUiServingTest`.

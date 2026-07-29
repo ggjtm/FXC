@@ -19,4 +19,17 @@ public record PortfolioView(Map<String, BigDecimal> cashByCurrency, Map<String, 
     public BigDecimal shares(String symbol) {
         return shares.getOrDefault(symbol, BigDecimal.ZERO);
     }
+
+    /**
+     * Balance in one currency, or zero. The liquidity-managed strategies size buys against this, so
+     * an absent currency reads as "no funds" rather than being an error.
+     */
+    public BigDecimal cash(String currency) {
+        return cashByCurrency.getOrDefault(currency, BigDecimal.ZERO);
+    }
+
+    /** True when nothing is known yet — i.e. {@link #empty()} or a statement that reported nothing. */
+    public boolean isEmpty() {
+        return cashByCurrency.isEmpty() && shares.isEmpty();
+    }
 }

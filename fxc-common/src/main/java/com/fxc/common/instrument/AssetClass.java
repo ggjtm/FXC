@@ -12,5 +12,5 @@ package com.fxc.common.instrument;
 public enum AssetClass {
     FX_SPOT,
     EQUITY;
-    // ToDo (docs/DESIGN.md §6.3): OPTION, FUTURE
+    // ToDo (docs/DESIGN.md §7.3): OPTION, FUTURE
 }

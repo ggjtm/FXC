@@ -90,6 +90,28 @@ subprojects {
     // application plugin registers `run` in each subproject's own build script (evaluated after
     // this block), so configureEach picks it up lazily. Harmless for non-GridGain run tasks.
     tasks.withType<JavaExec>().configureEach {
+        // Forward FXC config overrides from the Gradle invocation into the forked application JVM.
+        // Gradle's own `-D` flags land on the *daemon* JVM and JavaExec does not inherit them, so
+        // `./gradlew :FxcInvestor:run -Daccount=... -Dagent.seed=...` silently did nothing —
+        // FxcConfig reads System.getProperty() in the app, which never saw them. That broke both the
+        // documented `-Dkey=value` override (README) and scripts/demo.sh, whose two agents are meant
+        // to differ by account and seed so their orders cross.
+        //
+        // Only the FXC config namespaces are forwarded, deliberately: copying the whole
+        // system-property set would push the daemon's java.home/user.dir/etc. into the child.
+        val fxcConfigKeys = listOf(
+            "account", "mode",                                  // exact keys
+            "agent.", "ofx.", "fix.", "xmpp.",                   // prefixes
+            "feed.", "web.", "gridgain.", "db.", "archive."
+        )
+        for (key in System.getProperties().stringPropertyNames()) {
+            val matches = fxcConfigKeys.any { if (it.endsWith(".")) key.startsWith(it) else key == it }
+            if (matches) {
+                systemProperty(key, System.getProperty(key))
+            }
+        }
+        // Set last so the build's resolved, absolute license URL wins: a forked JVM's CWD is the
+        // subproject directory, where a relative path would not resolve.
         systemProperty("gridgain.license.url", gridgainLicenseUrl)
     }
 }
