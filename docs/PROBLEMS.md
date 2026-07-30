@@ -504,3 +504,110 @@ do print) and names what prices it. README states plainly that the feed leg is s
 
 **Lesson.** A demo's log output is an interface, and a claim about it is a testable assertion. If a doc
 says "watch for X", grep for X.
+
+---
+
+## P14 — a Locust custom option with a `None` default can never be changed from the web UI — **RESOLVED** (2026-07-29)
+
+**Symptom.** While building the investor-mix control (FxcInvestor/docs/stories/007), the natural way to
+express "no explicit mix given" was `parser.add_argument("--mix-rando", type=int, default=None)`. The
+field appeared in the UI's swarm form and accepted input, and the value never changed.
+
+**Root cause.** `locust/web.py`'s `/swarm` handler updates `environment.parsed_options` from the form
+while *preserving the existing type*, and its branch for an existing `None` writes the old value back:
+
+```python
+elif parsed_options_value is None:
+    parsed_options_dict[key] = parsed_options_value   # i.e. None, discarding the submitted value
+```
+
+With no type to coerce to, locust prefers keeping `None` over guessing. The form field is rendered, the
+POST carries the value, and it is dropped on arrival.
+
+**Impact.** Silent, and specific to the control surface the whole story is about: the option works from
+the CLI and from the environment, so tests and the container path pass while the browser does nothing.
+
+**Resolution.** Every harness option has a real default of its intended type — `0` for the mix shares,
+`""` for `--strategy`, `0` meaning "off" for the threshold gates. The rule is stated in the docstring in
+`loadgen/locustfile.py` where the options are declared, because the next person to add one will not read
+this file.
+
+**Lesson.** When a framework converts form strings using the current value's type, `None` is not a
+neutral default — it is an opt-out of being configurable at all.
+
+---
+
+## P15 — the Locust UI's user count lands on `users`, not `num_users` — **AVOIDED** (2026-07-29)
+
+**Symptom.** The first cut of the investor-mix control apportioned the mix across the user count read
+from `parsed_options.num_users`. It kept apportioning across the *command-line* count no matter what was
+typed in the browser.
+
+**Root cause.** Locust's `--users` option declares `dest="num_users"`, but the `/swarm` handler writes the
+submitted count to a **different** key:
+
+```python
+if key == "user_count":  # if we just renamed this field to "users" we wouldn't need this
+    user_count = int(value)
+    parsed_options_dict["users"] = user_count
+```
+
+So after any swarm from the UI, `vars(parsed_options)` has *both* `num_users` (stale, from CLI/env) and
+`users` (live). Nothing reads `users` inside locust — the runner is started from the local variable — so
+the mismatch is invisible until something else tries to read the current count.
+
+**Impact.** The mix would have appeared to work in headless runs and in tests, and quietly ignored the
+browser — the one path that matters.
+
+**Resolution.** None needed in the end: the as-built design (P16) apportions across the **live
+population** it holds a registry of, not across any option, so it never reads either key. Recorded
+because the next person to reach for `parsed_options.num_users` will hit this, and because it took a
+browser to notice — headless runs and tests both passed.
+
+**Lesson.** Two names for one value is a bug waiting for a second reader. The comment in locust's own
+source says as much; worth reading the handler rather than the option declaration.
+
+---
+
+## P16 — `User.fixed_count` cannot express a *live* population mix — **RESOLVED** (2026-07-29)
+
+**Symptom.** The investor mix (FxcInvestor/docs/stories/007) was first built the obvious way: one
+`User` subclass per strategy, and a `LoadTestShape` that set `fixed_count` on each class from the
+apportioned counts and returned the new total. Starting a run worked perfectly. **Changing the mix
+mid-run did not.** Asking for 2/9/5 from a running 3/3/2 produced 3/8/5; asking for 8/0/0 produced
+3/3/2 — unchanged. The shape's log line showed the right target, and locust logged `Ramping to 16
+users`, then `All users spawned: … (8 total users)`.
+
+**Root cause.** Three behaviours in `locust/dispatch.py` compose into a dead end:
+
+1. `_user_gen` builds its weighted generator once as `_kl_generator((u.__name__, u.weight) for u in
+   self._user_classes if not u.fixed_count)`. With every class carrying a `fixed_count`, that generator
+   is **empty** and yields `None` forever — which the dispatcher reads as "no user to spawn".
+2. The fixed-count branch runs only when `_try_dispatch_fixed` is set, and `new_dispatch` does **not**
+   set it. It is armed in `__init__`, on a worker rebalance, and on user *removal* — so a pure scale-up
+   never re-reads `fixed_count` at all.
+3. Even with the flag forced on, that branch only computes `fixed_count - current` for **positive**
+   misses: it tops up a shortfall and never removes a surplus. And removal (`_remove_users_from_workers`)
+   pops `_active_users` LIFO, class-blind, so scaling *down* removes whoever was newest rather than
+   whoever is over target.
+
+Verified by driving a `LocalRunner` directly rather than by reading: with the flag forced on, 2/9/5 came
+back as 3/8/5 (the surplus `rando` never left), and 8/0/0 came back as 3/3/2.
+
+**Impact.** This is the feature's whole point — "control a variable number of each type of investor
+**in the UI**" — so a mechanism that only works at start is not a partial win, it is the wrong
+mechanism. It also fails quietly: locust logs a ramp to the requested total and then reports a different
+total, with no error anywhere.
+
+**Resolution.** Inverted the ownership. There is **one** user class, and the strategy is an *attribute*
+of an investor rather than its type. Locust keeps doing what it is good at — owning the population size,
+ramping, and the UI's *Number of users* — while `fxc_loadgen.mix.reassign` moves the minimum number of
+**live** investors from one strategy to another, oldest kept, on a one-second timer. A strategy change
+costs nothing: the investor keeps its account, its RNG, its portfolio view and its connection. As a
+bonus, `--run-time` still works (a `LoadTestShape` takes over stopping a run, and would have had to
+re-implement the time limit) and no locust internals are touched at all.
+
+**Lesson.** `fixed_count` is documented as "spawned first" and its docstring even warns that the final
+count is undefined if the target is too small — that is a hint that it describes a *starting*
+distribution, not an invariant. When a framework's knob is only read at dispatch construction, it cannot
+be a live control; find the layer that *is* re-read, or own the state yourself.

@@ -53,6 +53,8 @@ Derivatives (options, futures) are an explicit ToDo (§7.3).
 | Console controls | Unauthenticated; each component gates them behind one config key and can serve a read-only console (§6.4, §7.8) |
 | Investor load harness | **Locust** (Python, `loadgen/`, containerised) — replaced Gatling, whose knobs freeze at JVM start so a run cannot be steered. Outside the Gradle build; UI on :8089 (§6.5) |
 | Investor liquidity policy | The non-naive strategies (`booker`, `bookfish`) scale buying to available cash and sell assets to maintain a cash floor, so a continuous demo does not exhaust an account. `rando` stays naive (§6.5) |
+| Investor population | All three strategies run at once, **one of each by default**, with the number of each steerable in the Locust UI mid-run as shares of the user count (§6.5, stories/007) |
+| `bookfish` patience | `bookfish` declines to trade until it has enough traded volume to form a view *and* the drawn price beats volume-weighted fair value by a tick — instead of silently taking `rando`'s uniform fallback. Implemented in both languages (§6.5, stories/003) |
 
 ## 3. Data architecture
 
@@ -403,10 +405,10 @@ binds, which for the dev defaults is `0.0.0.0`; a non-demo deployment wants both
 real authentication. Tracked as §7.8.
 
 
-### 6.5 Investor workload: the Locust load harness and the liquidity policy
+### 6.5 Investor workload: the Locust load harness, the population mix, and the liquidity policy
 
-Status: **implemented** (FxcInvestor/docs/stories/006). Harness UI at `http://localhost:8089`;
-`scripts/demo.sh` runs continuously by default.
+Status: **implemented** (FxcInvestor/docs/stories/006 and 007). Harness UI at `http://localhost:8089`;
+`scripts/demo.sh` runs continuously by default, with one investor of each type.
 
 **Why Locust replaced Gatling.** The demo needed a workload that runs until stopped and can be steered
 from a browser. Gatling OSS cannot do the second part, and this was verified in the plugin bytecode
@@ -440,6 +442,47 @@ Two broker-side facts the harness exposed: an **empty element is a fatal 400** (
 an aggregate close), so requests are built as strings and a blank value is refused; and the OFX server
 was a hardcoded four-thread pool, now `ofx.http.threads`, which is the real ceiling on throughput.
 
+**The population mix** (stories/007). All three strategies run at once — one of each by default — and the
+number of each is steerable in the UI *while the run is in progress*, alongside the user count and spawn
+rate. The three `mix-*` fields are **shares** of the population rather than absolute counts, so the knob
+story 006 exists for is scaled rather than replaced; shares that sum to the population *are* the counts.
+Apportionment is largest-remainder and then repairs any zero by borrowing from the largest holder, so a
+strategy the operator asked for is never silently absent, and anything that does not fit is logged.
+
+**The strategy is an attribute of an investor, not its class.** One user class runs, and a one-second
+reconciler moves the fewest live investors it can between strategies. This is the second design: per-class
+`fixed_count` is the obvious one, starts correctly, and **cannot be changed mid-run** — locust's
+dispatcher reads `fixed_count` only when a dispatch generator is built, tops up shortfalls without ever
+removing a surplus, and removes users LIFO and class-blind (PROBLEMS.md P16, verified by driving a
+`LocalRunner` rather than by reading). Inverting the ownership — locust owns the population size, FXC owns
+what each member does — makes a re-mix free (an investor keeps its account, RNG, portfolio and
+connection) and leaves `--run-time`, *Number of users* and *Spawn rate* on locust's native paths. Two
+further locust traps met on the way are recorded as P14 and P15, because both fail silently.
+
+Consequence worth stating: **`rando` now trades in the demo**, sharing the two seeded accounts with the
+managed strategies. It is naive by design and can be rejected, so `rejected:*` rows may appear where they
+previously could not — that is the split-metrics design doing its job, since a rejection is the system
+working. In practice it is rarer than expected: at the default mix `rando` is a third of eight investors
+asking for 1–10 shares against 1,000 shares and $1,000,000, and the liquidity-managed majority keeps the
+account near its baseline, so the measured run below saw none.
+
+**`bookfish`'s patience** (stories/003). Sampling from a *thin* traded-volume histogram silently falls
+back to `rando`'s uniform ±1% draw, which made `bookfish` indistinguishable from `rando` in exactly the
+situation where it had nothing to go on. It now waits: it requires a histogram that can support a
+distribution and at least a threshold of observed volume (else `skipped:not-ready`), and the drawn price
+must sit at least a tick on the favourable side of volume-weighted fair value for the drawn side (else
+`skipped:no-edge`). The draw happens before the gates, so an abstention consumes the same random numbers
+as an order and a seeded sequence is unchanged. Implemented twice — Java `strategy.PatientStrategy` and
+Python `fxc_loadgen.patience` — as a decorator *inside* the liquidity policy, being stateless so that an
+abstention can only delay a forced liquidity sell, never prevent it.
+
+The Python harness has no XMPP client, so where a Java agent's histogram comes from the FxcPub feed the
+harness pools every virtual investor's observations in one process-wide `MarketView` and reads
+market-wide volume-by-price from the exchange's **public chart feed** (`GET /api/candles`, §6.2) on an
+interval. That is a read of published market data, not a second order path; orders still go only to
+FxcBroker over OFX. A failing feed is logged once and degrades to local observations, which patience
+then reports as `not-ready` rather than hiding.
+
 **Liquidity policy.** The seeded accounts hold 1,000 shares and $1,000,000; a one-sided stream exhausts
 one of them within minutes and then produces only rejections — which is why the demo could not run
 continuously. The **non-naive** strategies (`booker`, `bookfish`) are therefore wrapped in a policy
@@ -454,8 +497,21 @@ rather than a change to `SamplingStrategy`, so `rando`'s existing tests pass unt
 Requirements round **up** onto the lot grid (a floor must actually be reached) while bounds round
 **down** (never exceed cash or holdings). Both fail closed: with no holdings data they decline to trade.
 
-Verified by a continuous run: **2,168 fills over 3.5 minutes with zero rejections**, equity
-mean-reverting around the seeded baseline rather than draining.
+**Verified by a continuous run** (2026-07-29, one of each investor type by default, `scripts/demo.sh`
+plus the two Java `booker` agents):
+
+| Measure | Result |
+|---|---|
+| Harness orders, 6 minutes at 8 investors | **1,457 posted, 1,457 accepted, 0 rejected, 0 transport failures** (`ofx-order` p95 12 ms) |
+| Per type | `RANDO accepted` 631 · `BOOKER accepted` 628 · `BOOKFISH accepted` 198 |
+| `bookfish` patience | `skipped:no-edge` 225 against 198 accepted — a 53% abstention rate, in the predicted range, while still contributing flow |
+| Exchange | market OPEN, 4,880 trades, ~5.2 trades/sec sustained |
+| Broker P&L | both accounts mean-reverting on the seeded 1,042,000 baseline (+509 and +270 after ~9,760 fills), not draining |
+| Live re-mix | 8 investors at 3/3/2 → `POST /swarm` with shares 1/4/2 and 16 users → **2/9/5 within seconds**, no restart, no stats reset |
+
+The earlier single-strategy run this replaces recorded 2,168 fills over 3.5 minutes with zero
+rejections; the shape of the claim is unchanged (sustainable flow, equity mean-reverting) with three
+kinds of investor in it instead of one.
 
 ## 7. Open items (flagged, not blocking)
 

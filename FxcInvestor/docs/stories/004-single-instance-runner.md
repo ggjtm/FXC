@@ -1,6 +1,6 @@
 # Single-instance runner
 
-Status: in-progress
+Status: done (agent loop, OFX client, feed ingestion, `cli/Repl`, decision log)
 Relates to: PLAN items 2–5; root DESIGN §4.4
 
 ## Summary

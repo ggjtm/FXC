@@ -1,6 +1,6 @@
 # rando — uniform-random agent
 
-Status: proposed
+Status: implemented (naive by design — see the note below)
 Relates to: PLAN item 5 (Strategy SPI + agents); root DESIGN §4.4
 
 ## Summary

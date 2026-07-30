@@ -101,7 +101,7 @@ and vendored D3 bundle from the `fxc-common` jar.
 |---|---|---|---|
 | **FxcExchange** | http://localhost:8090/ | 1-minute candles for a selectable security, translucent volume underlay in the bottom 20%, right-side volume-by-price histogram; live over a WebSocket when the interval end is left open | Stop/start trading (all symbols or just the selected one), clear the order book |
 | **FxcBroker** | http://localhost:8083/ | Last-sale ticker from the exchange feed, plus one line per account of cumulative trades vs. session P&L, with a legend and a table view | Stop/start trading |
-| **Locust load harness** | http://localhost:8089/ | Live request rate, latency, and business outcomes for the investor workload | Start/stop the run and change users or spawn rate **while it runs** |
+| **Locust load harness** | http://localhost:8089/ | Live request rate, latency, and business outcomes for the investor workload, broken out per investor type | Start/stop the run and change users, spawn rate, or **how many of each investor type** — all while it runs |
 
 REST surfaces: exchange `/api/candles`, `/api/symbols`, `/api/status`, `/api/book`, `/api/config`
 (+ `POST /api/session/halt|open`, `/api/book/clear`); broker `/api/status`, `/api/accounts`,
@@ -134,10 +134,18 @@ scripts/demo.sh --no-load     # continuous, without the Locust harness
 scripts/demo.sh --down        # additionally `docker compose down` on exit
 ```
 
-The agents use `booker` rather than `rando` because `booker` is liquidity-managed — it scales buying
-to available cash and sells to keep a cash floor, so the flow is sustainable indefinitely. `rando` is
-naive by design and a continuous run of it would exhaust one side of the account and degrade into
-rejections. Override with `FXC_AGENT_STRATEGY`.
+The two **Java** agents use `booker` rather than `rando` because `booker` is liquidity-managed — it
+scales buying to available cash and sells to keep a cash floor, so the flow is sustainable
+indefinitely. `rando` is naive by design and a continuous run of *only* it would exhaust one side of an
+account and degrade into rejections. Override with `FXC_AGENT_STRATEGY`.
+
+The **Locust** investors run **one of each type** by default — `rando`, `booker` and `bookfish` — and
+the number of each is a live control in the UI (`loadgen/README.md`). So the demo does show `rando`
+being rejected sometimes: those rows are broken out by reason and deliberately not counted as
+failures, because a broker saying no is the system working. `bookfish` also shows
+`skipped:no-edge` rows — it waits for an advantage rather than guessing
+(`FxcInvestor/docs/stories/003`). Set `FXC_LOADGEN_STRATEGY=booker` for the old single-strategy
+workload, or `FXC_LOADGEN_MIX_*` for a different starting mix.
 
 Two notes if you are editing while a demo is running:
 
@@ -147,6 +155,33 @@ Two notes if you are editing while a demo is running:
   starting the demo.
 - **Launcher JDK must be 21.** JDK 25 crashes the Gradle Kotlin-DSL parser. `.sdkmanrc` pins it if you
   use SDKMAN; otherwise `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` first.
+
+### Starting from a clean market
+
+A demo accumulates. A few minutes of continuous flow archives hundreds of thousands of rows to
+MariaDB, and the exchange chart, the broker's P&L curves and `bookfish`'s volume-by-price all read
+that history back — so the next demo opens on the market the last one left behind.
+
+**Stop the demo first**, then:
+
+```sh
+scripts/reset.sh              # truncate the archives, drop the GridGain work dirs and demo logs
+scripts/reset.sh --dry-run    # show exactly what would go, change nothing
+scripts/reset.sh --hard       # also destroy the MariaDB volume (Tigase's accounts go with it)
+```
+
+The default takes about a second and keeps the container, the volume and Tigase's XMPP accounts.
+`--hard` is `docker compose down -v`, so the next `docker compose up` re-creates the schemas and
+re-runs `tigase-init` — a minute or so. Either way the seeded balances come back, because FxcBroker
+re-seeds them from `account.*` at every start.
+
+The GridGain side needs no wiping *per se*: the hot tables are in-memory (`gridgain.persistence.enabled
+= false`) and die with the JVMs. What the script removes is each node's work directory
+(`$TMPDIR/fxc-{exchange,broker,pub}-ignite`) — cluster metadata that outlives a run and is the kind of
+stale state that makes a later startup fail for no visible reason.
+
+The script **refuses to run while the demo is up**: truncating archives under a live `ArchiveService`,
+or deleting a work directory under a live GridGain node, fails in ways that look like component bugs.
 
 Backend logs land in `build/demo-logs/`. The deterministic, CI-friendly proof of the same
 Investor → Broker → Exchange → fill → Pub → Investor-feed path is the JUnit orchestrator

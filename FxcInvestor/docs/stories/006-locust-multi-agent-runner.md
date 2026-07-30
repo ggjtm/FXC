@@ -81,9 +81,13 @@ went, but it is now the authoritative Java-side marshaller that the golden fixtu
 
 **Documented divergences from the Java agents:**
 
-- `bookfish` builds its traded-volume histogram from the XMPP feed in Java, seeing the whole market.
+- ~~`bookfish` builds its traded-volume histogram from the XMPP feed in Java, seeing the whole market.
   Python has no XMPP client, so it accumulates only its own observations — sparser, and it behaves like
-  `rando` via the fallback until a few trades are seen. Faithful in algorithm, narrower in input.
+  `rando` via the fallback until a few trades are seen. Faithful in algorithm, narrower in input.~~
+  **Closed by [007](007-investor-mix-control.md)**: the harness now pools observations across all virtual
+  investors in the process and reads market-wide volume-by-price from the exchange's public chart feed,
+  and `bookfish` *waits* rather than falling back to a uniform draw
+  ([003](003-bookfish-agent.md#patience-waiting-for-an-advantage), implemented in both languages).
 - Java and Python **cannot** produce the same sequence from the same seed (48-bit LCG vs Mersenne
   Twister). Reproducibility is within-language; the shared contract is the algorithm and its bounds.
 - Story 005's acceptance criterion "no duplicate order-building logic" is **not** met and cannot be:
@@ -125,3 +129,7 @@ Gatling Enterprise. Distributed Locust master/worker across machines (no code ch
 `--master`/`--worker` — but a single process is the default). Porting the XMPP feed to Python. A
 console for FxcInvestor itself: Locust's UI now covers workload control, so DESIGN's "FxcInvestor stays
 headless" decision stands.
+
+**Followed by [007](007-investor-mix-control.md)**, which added what Gatling's `sim.mix.*` did (a
+per-strategy population, steerable in the UI), the market-wide volume feed, per-strategy stats rows, and
+the `sim.max*` threshold assertions this story dropped.

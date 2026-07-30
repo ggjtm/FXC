@@ -23,6 +23,11 @@
 #
 # (`--keep` is gone: keeping the stack up is now the default, which is all it ever did.)
 #
+# A run accumulates: the archives grow by hundreds of thousands of rows in minutes, and the charts and
+# P&L curves read that history back, so a later demo opens on the market the last one left behind.
+# `scripts/reset.sh` (after stopping this) wipes the MariaDB archives and the GridGain work
+# directories and puts the next run back at a clean market.
+#
 # Requirements: Docker, and a JDK 21 for the Gradle launcher (building on JDK 25 breaks the Kotlin
 # DSL — see README "JDK requirements"). If `sdk` (SDKMAN) is available this script runs `sdk env`.
 #

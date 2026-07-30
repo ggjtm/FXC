@@ -5,12 +5,18 @@ Status per entry: **OPEN**, **RESOLVED**, or **MITIGATED**.
 
 ---
 
-## I1 — Timeline/feed features blocked by Tigase hold — **OPEN**
+## I1 — Timeline/feed features blocked by Tigase hold — **RESOLVED** (2026-07-13)
 
-The XMPP client (home-timeline ingestion + posting) and the `feed`/`post` CLI verbs depend on
-FxcPub/Tigase, which is on hold pending AGPLv3 acceptance (root PROBLEMS.md P2). The OFX-driven
-trading path (signon, statements, order entry, strategy loop) is independent — build and test that
-against FxcBroker first.
+The XMPP client (home-timeline ingestion + posting) and the `feed`/`post` CLI verbs depended on
+FxcPub/Tigase, which was on hold pending AGPLv3 acceptance (root PROBLEMS.md P2). The OFX-driven
+trading path (signon, statements, order entry, strategy loop) is independent, and was built and
+tested against FxcBroker first.
+
+**Resolution.** The AGPLv3 hold was accepted on 2026-07-13: stock, unmodified Tigase 8.4.1 runs in its
+own container, `FeedClient` and the `feed`/`post` verbs are wired, and `scripts/demo.sh` starts the
+whole loop. `EndToEndDemoIT` asserts the fill → FxcPub → investor-feed leg deterministically. This
+entry stayed OPEN for two weeks after the fact, which is how the stale-status sweep in
+FxcInvestor/docs/stories/007 found it.
 
 ## I2 — Custom OFX order-entry message set must match FxcBroker — **RESOLVED (Phase 4)**
 

@@ -12,6 +12,12 @@ package com.fxc.investor.strategy;
  * maintain liquidity (docs/DESIGN.md §6). That wrapping is what lets the demo run continuously instead
  * of exhausting one side of the seeded account and degrading into a reject stream.
  *
+ * <p>{@code bookfish} is additionally wrapped in {@link PatientStrategy} (docs/stories/003), so it
+ * waits for an advantage instead of falling back to a uniform draw when it has too little traded
+ * volume to form a view. <b>Patience goes inside liquidity</b>: the liquidity policy must be able to
+ * size the intent patience approved, and because it declines whenever its delegate declines, an
+ * abstention only ever delays a forced liquidity sell — the gate is stateless and re-asked every tick.
+ *
  * <p>Tests that want to exercise a bare sampler construct {@link SamplingStrategy} directly, so the
  * naive behaviour stays independently verifiable.
  */
@@ -29,7 +35,8 @@ public final class Strategies {
         return switch (name == null ? "rando" : name.toLowerCase()) {
             case "rando" -> new SamplingStrategy("rando", new RandoSampler());
             case "booker" -> liquidityManaged(new SamplingStrategy("booker", new BookerSampler()));
-            case "bookfish" -> liquidityManaged(new SamplingStrategy("bookfish", new BookfishSampler()));
+            case "bookfish" -> liquidityManaged(
+                    patient(new SamplingStrategy("bookfish", new BookfishSampler())));
             default -> throw new IllegalArgumentException("unknown strategy: " + name
                     + " (available: rando, booker, bookfish)");
         };
@@ -37,5 +44,9 @@ public final class Strategies {
 
     private static Strategy liquidityManaged(Strategy delegate) {
         return new LiquidityAwareStrategy(delegate);
+    }
+
+    private static Strategy patient(Strategy delegate) {
+        return new PatientStrategy(delegate);
     }
 }

@@ -95,11 +95,22 @@ services:
       LOCUST_AUTOSTART: ${FXC_LOADGEN_AUTOSTART:-true}
       FXC_ACCOUNTS: ${FXC_LOADGEN_ACCOUNTS:-000123456,000654321}
       FXC_SYMBOLS: ${FXC_LOADGEN_SYMBOLS:-ACME}
-      # booker, not rando, for the same reason scripts/demo.sh defaults its agents to booker: the
-      # liquidity-managed strategies scale buying to cash and sell to keep a cash floor, so the flow
-      # is sustainable indefinitely. rando is naive by design and a continuous run of it just
-      # exhausts one side of the account and degrades into rejections.
-      FXC_STRATEGY: ${FXC_LOADGEN_STRATEGY:-booker}
+      # One investor of each type by default (0/0/0 means "one of each" — see fxc_loadgen/mix.py), and
+      # all three are steerable in the UI while the run is in progress. Set shares here to start from a
+      # different mix, e.g. FXC_LOADGEN_MIX_BOOKER=4 for a booker-heavy run.
+      #
+      # This puts naive `rando` in the demo on purpose. The liquidity-managed majority (booker,
+      # bookfish) keeps the seeded accounts solvent, while rando's rejections — visible, broken out by
+      # reason, and not counted as failures — are what the split metrics exist to show. For the old
+      # single-strategy behaviour set FXC_LOADGEN_STRATEGY=booker.
+      FXC_STRATEGY: ${FXC_LOADGEN_STRATEGY:-}
+      FXC_MIX_RANDO: ${FXC_LOADGEN_MIX_RANDO:-0}
+      FXC_MIX_BOOKER: ${FXC_LOADGEN_MIX_BOOKER:-0}
+      FXC_MIX_BOOKFISH: ${FXC_LOADGEN_MIX_BOOKFISH:-0}
+      # Market-wide traded volume for bookfish, from the exchange's public chart feed on the host. This
+      # is what a Java agent gets over the XMPP feed and the harness otherwise cannot see; without it
+      # bookfish only ever sees its own fills and reports 'skipped:not-ready' for a long time.
+      FXC_EXCHANGE_URL: ${FXC_LOADGEN_EXCHANGE_URL:-http://host.docker.internal:8090}
     restart: unless-stopped
 
 volumes:

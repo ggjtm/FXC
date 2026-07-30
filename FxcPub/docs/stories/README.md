@@ -13,4 +13,8 @@ Status: proposed | blocked | in-progress | done
 Relates to: PLAN item / DESIGN §
 ```
 
-This component is currently **blocked** on the Tigase/AGPLv3 hold. No stories filed yet.
+No stories filed yet. The component itself is **not blocked** — the Tigase/AGPLv3 hold was accepted on
+2026-07-13 (root PROBLEMS.md P2, this component's PROBLEMS.md P-1), and stock Tigase 8.4.1 plus the
+Smack client layer, the GridGain projections and the FIX drop-copy acceptor are all running; see
+[PLAN.md](../PLAN.md). The open work is listed there (the broker's direct-XMPP bot leg,
+subscription-fed projections, non-admin service accounts) and has not been written up as stories.

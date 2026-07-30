@@ -18,8 +18,25 @@ final class HistogramSampling {
     private HistogramSampling() {
     }
 
-    static BigDecimal sample(Map<BigDecimal, BigDecimal> histogram, BigDecimal lastSale,
-                             double sigmaMult, double fallbackBand, Random rng) {
+    /**
+     * The shape of a price histogram: its positive-weight bins, sorted, plus their weight-weighted
+     * centre and spread.
+     *
+     * <p>Extracted so {@link PatientStrategy} reads the <em>same</em> numbers the sampler draws
+     * around — "fair value" in the gate has to mean the same thing as the centre here, or the two
+     * would disagree about what an advantage is. Mirrors Python {@code strategies.HistogramStats}.
+     */
+    record Stats(List<Map.Entry<BigDecimal, BigDecimal>> bins, double totalWeight, double mean,
+                 double std) {
+    }
+
+    /**
+     * Weighted stats for a {@code price -> weight} histogram, or {@code null} when it cannot support
+     * a distribution: fewer than two positive-weight bins, non-positive total weight, or zero
+     * variance (all the weight at one price). Those are exactly the cases
+     * {@link #sample} falls back on.
+     */
+    static Stats stats(Map<BigDecimal, BigDecimal> histogram) {
         // Stable, sorted bins with positive weight (determinism).
         List<Map.Entry<BigDecimal, BigDecimal>> bins = new ArrayList<>();
         for (Map.Entry<BigDecimal, BigDecimal> e : histogram.entrySet()) {
@@ -29,7 +46,7 @@ final class HistogramSampling {
         }
         bins.sort(Map.Entry.comparingByKey());
         if (bins.size() < 2) {
-            return fallback(lastSale, fallbackBand, rng);
+            return null;
         }
 
         double sumW = 0;
@@ -40,7 +57,7 @@ final class HistogramSampling {
             sumWP += w * e.getKey().doubleValue();
         }
         if (sumW <= 0) {
-            return fallback(lastSale, fallbackBand, rng);
+            return null;
         }
         double mean = sumWP / sumW;
         double var = 0;
@@ -51,14 +68,23 @@ final class HistogramSampling {
         var /= sumW;
         double std = Math.sqrt(var);
         if (std <= 0) {
+            return null;
+        }
+        return new Stats(bins, sumW, mean, std);
+    }
+
+    static BigDecimal sample(Map<BigDecimal, BigDecimal> histogram, BigDecimal lastSale,
+                             double sigmaMult, double fallbackBand, Random rng) {
+        Stats stats = stats(histogram);
+        if (stats == null) {
             return fallback(lastSale, fallbackBand, rng);
         }
 
-        double band = sigmaMult * std;
+        double band = sigmaMult * stats.std();
         double last = lastSale.doubleValue();
         List<Map.Entry<BigDecimal, BigDecimal>> inBand = new ArrayList<>();
         double total = 0;
-        for (Map.Entry<BigDecimal, BigDecimal> e : bins) {
+        for (Map.Entry<BigDecimal, BigDecimal> e : stats.bins()) {
             if (Math.abs(e.getKey().doubleValue() - last) <= band) {
                 inBand.add(e);
                 total += e.getValue().doubleValue();

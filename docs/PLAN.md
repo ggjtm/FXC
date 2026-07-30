@@ -10,8 +10,11 @@ shared `ColdStore` archival across all three GridGain components with FxcPub dee
 The post-roadmap stories below added the FxcExchange and FxcBroker demo consoles (DESIGN §6) with the
 backend they needed — trading-session state, mass cancel, per-account P&L — and then replaced the
 Gatling harness with a Python + Locust one whose UI can re-rate a run in progress, making the demo
-continuous. **156 Java tests + 105 Python tests**, 0 failures (integration tests skip gracefully
-without MariaDB/Tigase; the Python suite needs no pip install). Companion to [DESIGN.md](DESIGN.md).
+continuous — and then made the *investor population* steerable from that UI as well, one of each
+strategy by default, with a `bookfish` that waits for an advantage rather than guessing.
+**180 Java tests + 203 Python tests**, 0 failures (integration tests skip gracefully without
+MariaDB/Tigase; the Python suite needs no pip install, and the 19 tests that do need locust skip
+themselves). Companion to [DESIGN.md](DESIGN.md).
 
 Phases are ordered so every phase ends with something runnable and testable. Exchange comes
 first (everything depends on it), then Broker, then Pub, then Investor, then archival, then the
@@ -212,6 +215,21 @@ Feature stories layered on the completed components, tracked in each component's
   is the host-virtualenv path. Verified by `OfxGoldenEnvelopeTest`, `PortfolioCacheTest`,
   `LiquidityAwareStrategyTest`, 105 Python `unittest` tests, and a continuous run of **2,168 fills with
   zero rejections** and equity mean-reverting rather than draining.
+
+- **FxcInvestor — Investor mix control + a patient `bookfish` (`docs/stories/007`) — DONE.** Root DESIGN
+  §2/§6.5. All three strategies now run at once — **one of each by default, in the demo too** — with the
+  number of each steerable in the Locust UI mid-run as shares of the population; business outcomes are
+  reported per strategy, and Gatling's dropped `sim.max*` assertions come back as `--max-p95-ms` /
+  `--max-error-pct` / `--min-accepted` gating the process exit code. `bookfish` gained the market-wide
+  traded-volume signal Python never had (the exchange's public volume-by-price feed plus a process-wide
+  shared `MarketView`) and, with it, **patience**: it declines to trade until it can name an advantage
+  against volume-weighted fair value instead of silently taking `rando`'s uniform fallback —
+  implemented twice, as `strategy.PatientStrategy` and `fxc_loadgen.patience`, per the rule that a
+  strategy must not mean two different things in two languages. Per-class user counts were the obvious
+  mechanism for the mix and cannot be changed mid-run (PROBLEMS.md P16); the strategy is an attribute of
+  an investor instead. Verified by `PatientStrategyTest` (24) plus 98 new Python tests, with
+  `RandoStrategyTest`/`HistogramSamplerTest`/`LiquidityAwareStrategyTest` unchanged, and by live
+  re-mixing a running demo.
 
 ## Suggested review checkpoints
 

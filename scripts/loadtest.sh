@@ -13,8 +13,13 @@
 #   scripts/loadtest.sh                       # interactive: web UI on http://localhost:8089
 #   scripts/loadtest.sh --headless            # no UI; runs at the default users/rate and exits on Ctrl-C
 #   scripts/loadtest.sh --users 20 --spawn-rate 5
-#   scripts/loadtest.sh --strategy bookfish
+#   scripts/loadtest.sh --mix-rando 1 --mix-booker 4 --mix-bookfish 2   # shares of the user count
+#   scripts/loadtest.sh --strategy bookfish   # shorthand for a single-type run
+#   scripts/loadtest.sh --headless --run-time 1m --max-p95-ms 1000 --min-accepted 100  # gated run
 #   scripts/loadtest.sh -- --run-time 5m      # anything after `--` goes straight to locust
+#
+# With no mix flags it runs one investor of each type (rando, booker, bookfish) and all three counts
+# are steerable in the UI mid-run.
 #
 # Any flag this script does not recognise is passed through to locust, so `locust --help` is the full
 # reference. Reports land in build/locust-reports/ (already gitignored via build/).
@@ -78,9 +83,15 @@ fi
 
 # --- 3. run -----------------------------------------------------------------
 
+# bookfish samples market-wide traded volume from the exchange's public chart feed; on this path the
+# stack is local, so default to it rather than leaving bookfish to see only its own fills. Set
+# FXC_EXCHANGE_URL= (empty) to run without it.
+export FXC_EXCHANGE_URL="${FXC_EXCHANGE_URL-http://localhost:8090}"
+
 log "Reports: ${REPORT_DIR}"
 log "Remember: a green 'POST ofx-order' row alone does not mean orders are reaching the exchange —"
-log "watch 'ORDER accepted'. Every OFX failure comes back as HTTP 200."
+log "watch the '<STRATEGY> accepted' rows. Every OFX failure comes back as HTTP 200."
+log "'BOOKFISH skipped:no-edge' climbing is patience, not a fault (stories/003)."
 echo "-----------------------------------------------------------------------"
 
 exec "${VENV_DIR}/bin/locust" \

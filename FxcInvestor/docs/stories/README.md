@@ -21,3 +21,5 @@ Relates to: PLAN item / DESIGN §
 - [005 — Gatling multi-agent runner](005-gatling-multi-agent-runner.md) — **superseded by 006**
 - [006 — Locust multi-agent runner](006-locust-multi-agent-runner.md): Python + Locust load harness
   with a live control UI on :8089; replaces Gatling, which could not re-rate a run in progress
+- [007 — investor mix control](007-investor-mix-control.md): how many of each investor type to run,
+  steerable in that UI mid-run; market-wide traded volume and a patient `bookfish` came with it

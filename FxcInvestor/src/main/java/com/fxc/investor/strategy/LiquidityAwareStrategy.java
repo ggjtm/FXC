@@ -66,6 +66,15 @@ public final class LiquidityAwareStrategy implements Strategy {
         this(delegate, DEFAULT_BUY_BUDGET_FRACTION, DEFAULT_CASH_FLOOR_FRACTION);
     }
 
+    /**
+     * The wrapped strategy. Package-private for the tests: the order of the wrappers around
+     * {@code bookfish} — patience inside liquidity — is load-bearing (see {@link Strategies}), so it is
+     * worth asserting rather than assuming.
+     */
+    Strategy delegate() {
+        return delegate;
+    }
+
     public LiquidityAwareStrategy(Strategy delegate, BigDecimal buyBudgetFraction,
                                   BigDecimal cashFloorFraction) {
         this.delegate = delegate;
