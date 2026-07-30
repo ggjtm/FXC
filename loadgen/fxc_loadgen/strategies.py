@@ -153,7 +153,7 @@ class RandoStrategy:
         side, quantity = _side_and_quantity(rng)
         if market.book:
             if side == "BUY":
-                target_price = min(price for _side, price, _qty in market.book[symbol] if _side == "ASK")
+                target_price = min(price for _side, price, _qty in market.book[symbol] if _side == "OFFER")
             else:
                 target_price = max(price for _side, price, _qty in market.book[symbol] if _side == "BID")
         else:   
