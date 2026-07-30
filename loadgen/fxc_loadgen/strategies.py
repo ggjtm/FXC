@@ -151,9 +151,16 @@ class RandoStrategy:
             return None  # no last sale yet — Optional.empty() in Java
         factor = Decimal(str(1.0 + (rng.random() * 2.0 - 1.0) * self.band))
         side, quantity = _side_and_quantity(rng)
+        if market.book:
+            if side == "BUY":
+                target_price = min(price for _side, price, _qty in market.book[symbol] if _side == "ASK")
+            else:
+                target_price = max(price for _side, price, _qty in market.book[symbol] if _side == "BID")
+        else:   
+            target_price = last * factor
         return OrderIntent(
             side=side,
-            price=instruments.snap_to_tick(symbol, last * factor),
+            price=target_price,
             quantity=quantity,
         )
 
