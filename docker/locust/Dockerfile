@@ -33,15 +33,15 @@ EXPOSE 8089
 
 # Every option below can be overridden by a LOCUST_* environment variable or on the command line.
 #
-# --autostart matters for the demo contract: the run begins immediately at a laptop-appropriate rate
-# rather than waiting for someone to click Start, while the web UI stays live so users and spawn rate
-# can still be changed mid-run. Without it the "continuous by default" demo would generate no Locust
-# load until a browser showed up.
+# --autostart is OFF: the harness comes up idle so adding load is a deliberate act you can show, the
+# same reason the exchange now boots with the market halted. Users, spawn rate and the mix shares still
+# prefill the form, so starting is one click at http://localhost:8089 (or one POST /swarm). Set
+# LOCUST_AUTOSTART=true for an unattended run — `scripts/demo.sh --batch` starts the swarm itself.
 ENV LOCUST_LOCUSTFILE=/app/locustfile.py \
     LOCUST_HOST=http://host.docker.internal:8082 \
     LOCUST_WEB_HOST=0.0.0.0 \
-    LOCUST_AUTOSTART=true \
-    LOCUST_USERS=8 \
+    LOCUST_AUTOSTART=false \
+    LOCUST_USERS=64 \
     LOCUST_SPAWN_RATE=2 \
     PYTHONUNBUFFERED=1
 

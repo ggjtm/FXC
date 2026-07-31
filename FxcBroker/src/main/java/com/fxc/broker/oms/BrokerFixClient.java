@@ -195,7 +195,17 @@ public final class BrokerFixClient extends MessageCracker implements Application
         boolean isFill = execType == ExecType.TRADE;
         boolean isReject = execType == ExecType.REJECTED || ordStatus == OrdStatus.REJECTED;
 
-        oms.onExecutionReport(clOrdId, execId, exchangeOrderId, isFill, isReject, lastQty, lastPx, cumQty, text);
+        // The side the exchange says filled. Passed through so the OMS can check it against the order
+        // this id resolves to rather than assuming they agree (docs/PROBLEMS.md P18).
+        Side reportedSide = null;
+        if (report.isSetField(quickfix.field.Side.FIELD)) {
+            char side = report.getChar(quickfix.field.Side.FIELD);
+            reportedSide = side == quickfix.field.Side.BUY ? Side.BUY
+                    : side == quickfix.field.Side.SELL ? Side.SELL : null;
+        }
+
+        oms.onExecutionReport(clOrdId, execId, exchangeOrderId, isFill, isReject, lastQty, lastPx, cumQty,
+                text, reportedSide);
 
         if (isFill && lastQty != null) { // (drop-copy below)
             // Drop-copy the fill to FxcPub (best-effort).

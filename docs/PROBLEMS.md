@@ -611,3 +611,137 @@ re-implement the time limit) and no locust internals are touched at all.
 count is undefined if the target is too small — that is a hint that it describes a *starting*
 distribution, not an invariant. When a framework's knob is only read at dispatch construction, it cannot
 be a live control; find the layer that *is* re-read, or own the state yourself.
+
+---
+
+## P17 — the P&L point cap bounded heap, not the payload, and froze the curve — **RESOLVED** (2026-07-30)
+
+**Symptom.** Asked what the logic behind the console's P&L point limit was. Reading it back:
+`PnlService` stopped appending at `MAX_POINTS = 20_000` per account, set a `truncated` flag and showed
+a ⚠ notice. So a demo left running long enough reached a state where **the chart stopped moving while
+the market kept trading** — the console quietly became a screenshot of two hours ago.
+
+**Root cause.** The cap was added with the continuous demo (`b3cf19c`) to stop an unbounded in-memory
+list growing forever, and it does that. But it was the only bound, and it was on the wrong resource:
+
+- `/api/pnl` serialised **every** retained point on **every** request, and the console polls once a
+  second (`broker.js:29`). The response therefore grew linearly to roughly a megabyte per account and
+  stayed there — about 2.4 MB/s of JSON for two accounts, and the plan to give every agent its own
+  account (stories/004) would have multiplied that by five.
+- Reaching the cap *stopped recording* rather than dropping the oldest, which is the one behaviour a
+  live monitor must not have. Keeping the head was not arbitrary — `relative` is measured against the
+  session baseline, so the first point is the anchor — but "keep the anchor" and "stop the curve" are
+  not the same requirement.
+- At the demo's measured ~2.4 fills/sec per account the cap landed about 2.3 hours in: far enough away
+  to never show up in a test, close enough to hit over a lunch break.
+
+**Impact.** Two failure modes that look nothing alike from the outside: a console that renders instantly
+but shows stale history, and a broker steadily serving megabytes to a page nobody is reading closely.
+Neither logs anything.
+
+**Resolution.** A rolling window (FxcBroker/docs/stories/003) with three separate bounds:
+`pnl.windowMs` (15 min) for what the chart means, `pnl.maxPointsPerAccount` (600 ≈ the chart's width in
+pixels) for what a poll costs, and `pnl.plotAccounts` (8 = the palette size) for how many accounts carry
+a curve. Eviction happens on read as well as on write, so an idle account ages out too. `truncated` is
+gone; `windowMs` and a `dropped` count take its place, and the axis says "last 15 min" instead of a ⚠.
+
+**Lesson.** A limit is only as good as the resource it is on. This one was chosen against heap — the
+one resource that was never scarce — while the two things that actually degraded (payload size and
+whether the chart was still true) had no bound at all. When a cap is added, write down which resource
+it protects; if the answer is not the one that fails first, it is decoration.
+
+---
+
+## P18 — client-order-id collisions created shares and destroyed cash — **RESOLVED** (2026-07-30)
+
+**Symptom.** Every account in a running demo was losing money — 260 of 260, including accounts with
+barely any trades. Most of that is explained by mark-to-market on a falling market in a long-only
+system (see below), but reading the actual positions turned up something that is not:
+
+```
+total cash    259,981,548.69   expected 260,000,000   delta   -18,451.31
+total shares         260,509   expected     260,000   delta        +509
+```
+
+509 shares existed that nobody seeded, and $18,451 of cash had vanished — 509 × ~$36 ≈ the missing
+cash. **The system was minting stock and burning money.**
+
+**Root cause.** Three defects composing:
+
+1. **`InvestorAgent` builds client order ids as `"INV-" + counter`, and the counter restarts at zero
+   in every JVM.** Both demo agents use the prefix `INV`, so both emit `INV-1`, `INV-2`, … The Locust
+   harness had this right (`LOC-<index>-<runtag>-<n>`); the Java agents did not.
+2. **`OmsService` keyed its order map on that id and let a repeat overwrite the entry** — the exact
+   footgun the harness's own comment warns about ("the broker keys its order map on TRNUID, so a
+   duplicate silently overwrites prior order state"). Worse, the reject path *also* wrote to the map
+   and to `CLIENT_ORDER`, so even rejecting a duplicate destroyed the original.
+3. **`onExecutionReport` applied `order.side()` from that map and never looked at the side the
+   exchange reported** (`BrokerFixClient` did not even read tag 54), and had no idempotency on
+   `execId`. So when agent A's `INV-71` BUY and agent B's `INV-71` SELL both existed at the exchange,
+   both fills resolved to whichever order won the map and were applied with *that* order's side — one
+   side twice, the other never.
+
+The evidence: 53 exchange trades with `buy_order_id = sell_order_id` (two different orders wearing one
+id, crossing each other) and **152 client order ids carrying executions on both sides**. The archive
+hid it: `EXECUTION` MERGEs on `exec_id` and `CLIENT_ORDER` on `client_order_id`, so the tables
+deduplicated what the balances had already double-counted.
+
+**Impact.** Silent, and in the one place a trading system must not be wrong. It also biases the
+market: minted shares are supply that nobody paid for. At ~$18k against ~$1.59M of aggregate mark-to-
+market losses it was not *the* reason the demo looked bearish, but it was real money moving to nobody.
+
+**Resolution.** Conservation is now enforced at three points, with `OrderIdentityTest` asserting each:
+a reused client order id is **rejected without touching the stored order** (what a real OMS does with
+a duplicate ClOrdID); an `execId` already applied is ignored, so a FIX resend cannot move balances
+twice; and a report whose side disagrees with the order that id resolves to is refused rather than
+guessed at, with counters (`duplicateReportCount`, `mismatchedReportCount`) so it is visible. Agent
+ids are now qualified with the account and a start-time tag, so they are unique across agents *and*
+across restarts.
+
+**Lesson.** The dedupe in the persistence layer was not a safety net — it was camouflage. `MERGE` on a
+natural key makes duplicate *writes* idempotent while doing nothing for the duplicate *effects*
+already applied, and it removes the evidence that would have shown up as duplicate rows. When an
+identifier is a primary key for state that moves money, its uniqueness has to be enforced where the
+state moves, not where it is written.
+
+---
+
+## P19 — seeding investors with shares inflated the float, and a long-only market can only fall — **RESOLVED** (2026-07-30)
+
+**Symptom.** A demo run with 260 accounts showed **every single account losing money** — 260 of 260,
+including accounts with barely any trades. The price fell 42.10 → 32.23 (−23%) monotonically, the
+order book had **no bids at all** (340 resting offers, `bestBid: null`), and adding more investors with
+seed capital made it worse rather than better.
+
+**Root cause.** Three properties of the demo compounding, none of them a calculation error:
+
+1. **Every opened account was seeded with 1,000 shares as well as $1M.** 260 accounts injected
+   **260,000 shares against an original float of 2,000** — a 130× supply increase. Adding an "investor
+   with capital" was adding stock.
+2. **Nobody can be short.** `AccountService.check` refuses a sell beyond holdings ("no shorting"), so
+   every participant is structurally long. In a long-only market with a falling price, *100% losers is
+   the only possible outcome* — there is no position that profits from a decline. That is why the
+   result looked impossible for a closed system.
+3. **Mark-to-market is not zero-sum.** Equity is `cash + shares × P` with one `P` applied to every
+   share in existence. Cash and shares are conserved; their *valuation* is not. A 9.87 fall across
+   260,000 shares removed ~$2.5M of marked value that never existed as cash and that nobody received.
+
+The microstructure supplied the direction: the engine executes at the **resting** order's price, so a
+buyer who wants to pay more simply lifts an offer and can never print a higher price, while a seller
+can always undercut and print a lower one. With every strategy anchoring its quotes to the last sale,
+the print ratchets down and drags the quotes with it.
+
+**Impact.** The demo's headline screen told a story that was arithmetically correct and completely
+misleading: it looked like every strategy was bad, when what it showed was a float being inflated
+faster than capital could absorb it.
+
+**Resolution.** Opened accounts are funded **cash only** (`account.open.seedShares = 0`). The tradable
+float is what the seeded dev accounts hold and does not move when investors are added; investors
+arrive with money and have to bid for it. `AccountOpeningTest.openingAccountsDoesNotChangeTheFloat`
+pins the invariant. Share seeding stays available (`account.open.seedShares`) for anyone who wants an
+agent to start long.
+
+**Lesson.** "Injecting liquidity" is not one thing. Cash and stock are both liquidity and they push the
+price in opposite directions; a seeding policy that hands out both is choosing a price direction
+whether or not anyone intended to. And in a market where nobody can be short, *everyone losing* is not
+evidence of a bug — it is what a falling price means when there is no other side to be on.

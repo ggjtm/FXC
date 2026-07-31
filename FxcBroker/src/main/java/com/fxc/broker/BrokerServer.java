@@ -11,6 +11,7 @@ import com.fxc.broker.oms.BrokerDropCopyClient;
 import com.fxc.broker.oms.BrokerFixClient;
 import com.fxc.broker.oms.OmsService;
 import com.fxc.broker.pnl.PnlService;
+import com.fxc.broker.pnl.PnlSettings;
 import com.fxc.broker.web.BrokerConsoleService;
 import com.fxc.broker.web.BrokerWebServer;
 import com.fxc.common.store.ColdStore;
@@ -96,7 +97,7 @@ public final class BrokerServer implements AutoCloseable {
                                      ColdStore coldStore, long archiveIntervalMs) throws Exception {
         return start(gridInstanceName, gridDiscoveryPort, workDir, fixInitiatorSettings, ofxHost, ofxPort,
                 ofxUser, ofxPassword, brokerId, seeder, dropCopySettings, coldStore, archiveIntervalMs,
-                -1, true, OfxHttpServer.DEFAULT_THREADS);
+                -1, true, OfxHttpServer.DEFAULT_THREADS, PnlSettings.defaults(), true);
     }
 
     /** Start with the console, at the default OFX thread count. */
@@ -109,7 +110,8 @@ public final class BrokerServer implements AutoCloseable {
                                      int webPort, boolean webControlsEnabled) throws Exception {
         return start(gridInstanceName, gridDiscoveryPort, workDir, fixInitiatorSettings, ofxHost,
                 ofxPort, ofxUser, ofxPassword, brokerId, seeder, dropCopySettings, coldStore,
-                archiveIntervalMs, webPort, webControlsEnabled, OfxHttpServer.DEFAULT_THREADS);
+                archiveIntervalMs, webPort, webControlsEnabled, OfxHttpServer.DEFAULT_THREADS,
+                PnlSettings.defaults(), true);
     }
 
     /**
@@ -128,7 +130,8 @@ public final class BrokerServer implements AutoCloseable {
                                      SessionSettings dropCopySettings,
                                      ColdStore coldStore, long archiveIntervalMs,
                                      int webPort, boolean webControlsEnabled,
-                                     int ofxThreads) throws Exception {
+                                     int ofxThreads, PnlSettings pnlSettings,
+                                     boolean webAccountsEnabled) throws Exception {
         GridNode node = GridNode.start(gridInstanceName, gridDiscoveryPort, workDir);
         try {
             BrokerTables.createAll(node.ignite());
@@ -147,9 +150,13 @@ public final class BrokerServer implements AutoCloseable {
 
             // Session P&L for the console (stories/002). Baselines are captured now — after seeding
             // and before any order can be routed — because every later figure is relative to them.
-            PnlService pnlService = new PnlService(accountService, marketData, System::currentTimeMillis);
+            PnlService pnlService = new PnlService(accountService, marketData,
+                    System::currentTimeMillis, pnlSettings);
             pnlService.captureBaselines();
             omsService.addFillListener(pnlService);
+            // An account opened later needs the same baseline treatment the seeded ones just got
+            // (docs/stories/004), or its curve would start at its first fill instead of at zero.
+            accountService.addAccountOpenedListener(pnlService);
 
             fixClient.start();
             // Best-effort: wait for the exchange session so routing/market-data work immediately.
@@ -175,7 +182,8 @@ public final class BrokerServer implements AutoCloseable {
             if (webPort >= 0) {
                 BrokerConsoleService consoleService = new BrokerConsoleService(omsService, accountService,
                         marketData, pnlService, fixClient::isLoggedOn, System::currentTimeMillis);
-                webServer = new BrokerWebServer(ofxHost, webPort, consoleService, webControlsEnabled);
+                webServer = new BrokerWebServer(ofxHost, webPort, consoleService, webControlsEnabled,
+                        webAccountsEnabled);
                 webServer.start();
             }
 

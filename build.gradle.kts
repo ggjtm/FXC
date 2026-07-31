@@ -85,6 +85,11 @@ subprojects {
         useJUnitPlatform()
         jvmArgs(igniteJvmArgs)
         systemProperty("gridgain.license.url", gridgainLicenseUrl)
+        // Most service tests start a real embedded GridGain node, and a suite runs dozens of them in
+        // one JVM. Gradle's default test heap (512m) ran out mid-node-start once FxcBroker's suite
+        // grew — an OutOfMemoryError inside IgniteTxManager, which reads like a product failure and is
+        // not one. Sized for the node count rather than the data: these nodes hold almost nothing.
+        maxHeapSize = "2g"
     }
     // The `run` targets of the GridGain application modules (FxcExchange/FxcBroker/FxcPub). The
     // application plugin registers `run` in each subproject's own build script (evaluated after

@@ -35,7 +35,12 @@ public final class InvestorAgent {
         this.strategy = strategy;
         this.marketView = marketView;
         this.rng = rng;
-        this.clOrdPrefix = clOrdPrefix;
+        // The client order id is the broker's primary key for an order, and this counter restarts at
+        // zero in every JVM — so two agents sharing a prefix emit the same ids and the broker cannot
+        // tell their orders apart (docs/PROBLEMS.md P18: it applied one agent's fills to the other's
+        // account). Qualify the prefix with the account and a start-time tag, the way the Locust
+        // harness already does, so ids are unique across agents AND across restarts of one agent.
+        this.clOrdPrefix = clOrdPrefix + "-" + account + "-" + (System.currentTimeMillis() / 1000L);
     }
 
     public MarketView marketView() {

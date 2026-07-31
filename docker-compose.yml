@@ -90,10 +90,10 @@ services:
       # an explicit action in the UI.
       LOCUST_USERS: ${FXC_LOADGEN_USERS:-8}
       LOCUST_SPAWN_RATE: ${FXC_LOADGEN_SPAWN_RATE:-2}
-      # Begin swarming on startup so the demo is continuous without needing a browser; the UI stays
-      # live for control. Set false to come up idle and start it by hand.
-      LOCUST_AUTOSTART: ${FXC_LOADGEN_AUTOSTART:-true}
-      FXC_ACCOUNTS: ${FXC_LOADGEN_ACCOUNTS:-000123456,000654321}
+      # Come up IDLE. Adding load is a deliberate act in the demo — press Start at :8089 — matching the
+      # exchange booting with the market halted. Set true for an unattended run.
+      LOCUST_AUTOSTART: ${FXC_LOADGEN_AUTOSTART:-false}
+      FXC_ACCOUNTS: ${FXC_LOADGEN_ACCOUNTS:-000000001,000000002}
       FXC_SYMBOLS: ${FXC_LOADGEN_SYMBOLS:-ACME}
       # One investor of each type by default (0/0/0 means "one of each" — see fxc_loadgen/mix.py), and
       # all three are steerable in the UI while the run is in progress. Set shares here to start from a
@@ -111,6 +111,12 @@ services:
       # is what a Java agent gets over the XMPP feed and the harness otherwise cannot see; without it
       # bookfish only ever sees its own fills and reports 'skipped:not-ready' for a long time.
       FXC_EXCHANGE_URL: ${FXC_LOADGEN_EXCHANGE_URL:-http://host.docker.internal:8090}
+      # Each virtual investor opens its own broker account (FxcInvestor/docs/stories/004) instead of
+      # sharing the two seeded dev accounts, so the broker console's per-account P&L is per *agent*.
+      # Identity is a slot (locust-0, locust-1, …) released when an investor stops, so a ramp or a
+      # re-mix reuses accounts rather than opening one per spawn. Empty falls back to FXC_ACCOUNTS.
+      FXC_BROKER_CONSOLE_URL: ${FXC_LOADGEN_BROKER_CONSOLE_URL:-http://host.docker.internal:8083}
+      FXC_CLIENT_PREFIX: ${FXC_LOADGEN_CLIENT_PREFIX:-locust}
     restart: unless-stopped
 
 volumes:

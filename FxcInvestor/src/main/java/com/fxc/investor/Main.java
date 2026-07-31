@@ -1,6 +1,7 @@
 package com.fxc.investor;
 
 import com.fxc.common.config.FxcConfig;
+import com.fxc.investor.account.AccountClient;
 import com.fxc.investor.agent.InvestorAgent;
 import com.fxc.investor.agent.PortfolioCache;
 import com.fxc.investor.agent.SubmittedOrder;
@@ -38,7 +39,20 @@ public final class Main {
         String ofxUser = config.getString("ofx.user", "investor");
         String ofxPassword = config.getString("ofx.password", "secret");
         String brokerId = config.getString("ofx.brokerId", "FXC-BROKER");
-        String account = config.getString("account", "000123456");
+        // Each agent trades its OWN account (docs/stories/004): with `account` unset it asks the
+        // broker to open one under a stable client id, so the console's per-account P&L is this
+        // agent's rather than a blend of everything sharing a dev account. Setting `account`
+        // explicitly still pins it — that is what the REPL and the integration tests do.
+        String configuredAccount = config.getString("account", "").strip();
+        // A key present but empty is how the conf says "unset" — FxcConfig would otherwise hand back
+        // the empty string and the broker would refuse a blank client id.
+        String clientId = config.getString("agent.clientId", "").strip();
+        if (clientId.isBlank()) {
+            clientId = "investor-" + config.getInt("agent.seed", 42);
+        }
+        String consoleUrl = config.getString("broker.console.url", "http://localhost:8083");
+        String fallbackAccount = config.getString("account.fallback", "000000002");
+        String account = resolveAccount(configuredAccount, clientId, consoleUrl, fallbackAccount);
 
         String strategyName = config.getString("agent.strategy", "rando");
         String symbol = config.getString("agent.symbol", "ACME");
@@ -159,6 +173,31 @@ public final class Main {
             System.out.println("Decision-log persistence unavailable (" + e.getMessage() + "); continuing without it.");
             return null;
         }
+    }
+
+    /**
+     * Which account this agent trades: the configured one if there is one, otherwise the one the
+     * broker opens for this client id, otherwise the shared fallback.
+     *
+     * <p>The fallback matters: a broker with account opening switched off, or a console that is not
+     * running, should cost the agent its <em>private</em> account, not its ability to trade.
+     */
+    private static String resolveAccount(String configured, String clientId, String consoleUrl,
+                                         String fallback) {
+        if (!configured.isBlank()) {
+            return configured;
+        }
+        return new AccountClient(consoleUrl).open(clientId, "Agent " + clientId)
+                .map(result -> {
+                    System.out.println("[account] " + (result.opened() ? "opened " : "reusing ")
+                            + result.account() + " for " + clientId);
+                    return result.account();
+                })
+                .orElseGet(() -> {
+                    System.out.println("[account] falling back to the shared account " + fallback
+                            + " — this agent's P&L will include anything else trading it");
+                    return fallback;
+                });
     }
 
     private static void logDecision(InvestorStore store, String account, String symbol, String strategy,

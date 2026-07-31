@@ -26,9 +26,10 @@ Derivatives (options, futures) are an explicit ToDo (§7.3).
                                 │(bot user)│(ExecutionReports)
  ┌─────────────┐   OFX 2.x   ┌──┴──────────┴─────────┐   FIX 4.4    ┌───────────────────────┐
  │ FxcInvestor │────HTTP────▶│       FxcBroker       │─────────────▶│     FxcExchange       │
- │ agent + CLI │             │  OFX server + OMS     │◀─────────────│ market data, matching │
- │  (MariaDB)  │◀───XMPP────▶│ (GridGain 8 hot state)│  orders/MD/  │       clearing        │
- └─────────────┘   to Pub    └───────────────────────┘  fills       │ (GridGain 8 hot state)│
+ │ agent + CLI │  + one REST │  OFX server + OMS     │◀─────────────│ market data, matching │
+ │  (MariaDB)  │  call: open │ (GridGain 8 hot state)│  orders/MD/  │       clearing        │
+ │             │  an account └───────────────────────┘  fills       │ (GridGain 8 hot state)│
+ └─────────────┘◀───XMPP────▶       (§4.2, stories/004)             │                       │
                                                                     └───────────────────────┘
                 All components archive cold/historical data to MariaDB.
 ```
@@ -51,9 +52,13 @@ Derivatives (options, futures) are an explicit ToDo (§7.3).
 | Component consoles (§6) | FxcExchange + FxcBroker only; static HTML+CSS+JS over REST, dark theme, D3+SVG. FxcPub stays headless; FxcInvestor's workload is steered from the Locust UI instead (§6.5) |
 | D3 delivery | Full `d3.v7.min.js` **vendored** into `fxc-common` resources and served off the classpath — the demo runs offline, and a static asset keeps the framework-free rule intact (§6.1) |
 | Console controls | Unauthenticated; each component gates them behind one config key and can serve a read-only console (§6.4, §7.8) |
+| Demo starts cold | The exchange boots with the session **halted** (`session.startClosed`) and the Locust harness boots **idle** (`LOCUST_AUTOSTART=false`), so opening the market and adding load are both things an operator does deliberately rather than finding already done. `scripts/demo.sh` holds its agents until the market opens; `--batch` opens it itself (§6.2, FxcExchange/stories/002) |
 | Investor load harness | **Locust** (Python, `loadgen/`, containerised) — replaced Gatling, whose knobs freeze at JVM start so a run cannot be steered. Outside the Gradle build; UI on :8089 (§6.5) |
 | Investor liquidity policy | The non-naive strategies (`booker`, `bookfish`) scale buying to available cash and sell assets to maintain a cash floor, so a continuous demo does not exhaust an account. `rando` stays naive (§6.5) |
 | Investor population | All three strategies run at once, **one of each by default**, with the number of each steerable in the Locust UI mid-run as shares of the user count (§6.5, stories/007) |
+| Account per agent | Every trading agent opens its own broker account over `POST /api/accounts`, idempotent per client id, so per-account P&L is one agent's rather than a blend. **Cash only**: the float belongs to the market makers, so adding investors adds capital rather than stock (§4.2, FxcBroker/stories/004, PROBLEMS P19) |
+| Account numbering | **Below 100 is the broker's own** — the issuer (0) and the market makers (1, 2) — and the console leaves them out entirely (`pnl.internalAccountsBelow`). Customers are allocated from 100000 up. The number *is* the classification: no flag to set at seeding time, and no way to be internal in one place and not another (§6.3) |
+| P&L history | A **rolling 15-minute window**, downsampled to ~600 points per account and plotted for the busiest 8; totals still cover every account. Replaced a fixed 20,000-point cap that froze the curve while the payload grew unbounded (§6.3, FxcBroker/stories/003, PROBLEMS P17) |
 | `bookfish` patience | `bookfish` declines to trade until it has enough traded volume to form a view *and* the drawn price beats volume-weighted fair value by a tick — instead of silently taking `rando`'s uniform fallback. Implemented in both languages (§6.5, stories/003) |
 
 ## 3. Data architecture
@@ -199,6 +204,14 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
 - **Console (`com.fxc.broker.web`, `com.fxc.broker.pnl`, docs/stories/002)** — an operator
   start/stop-trading gate on `OmsService`, session mark-to-market P&L per account (`PnlService`,
   `FxRates`), and a second HTTP server on 8083 serving the monitor console (§6.3).
+- **Account opening (docs/stories/004)** — `POST /api/accounts?clientId=…` returns the account for an
+  agent, opening and funding one the first time that client id asks. `ACCOUNT` carries `client_id`,
+  which is what makes it idempotent: an agent that restarts, or a Locust investor respawning into the
+  same slot, resumes its own account instead of stranding it. Funded with **cash only** — an opened
+  account carrying stock would mint it, so adding investors inflated the float instead of bringing
+  capital to it and drove the price down 23% (PROBLEMS.md P19); the tradable float is what the seeded
+  dev accounts hold, and investors have to bid for it. Gated by its own `account.open.enabled` — a read-only *operator* console must not stop *clients*
+  from opening accounts. It is the one thing an investor does over REST rather than OFX (§4.4).
 
 ### 4.3 FxcPub — stock Tigase + XMPP-client application layer
 
@@ -276,6 +289,14 @@ directly. The Javalin dependency and the REST/OAuth surface move to that addon's
   statement read is a round trip and the broker's OFX pool is small (`ofx.http.threads`).
 - **Load generation is a separate concern** — see §6.5. The Java agents are the architectural
   participants (Strategy SPI, XMPP timeline, decision log); volume comes from the Locust harness.
+- **Each agent opens its own account** at startup (§4.2, FxcBroker/stories/004) under a stable
+  `agent.clientId`, and trades only that — so the console's per-account P&L is this agent's rather
+  than a blend of everything sharing a dev account. Setting `account` explicitly pins one instead,
+  which is what the REPL and the integration tests do. **This is the one thing an investor does over
+  REST**: OFX has no account-opening message set, and a third custom message set for a call each agent
+  makes exactly once bought nothing over the broker's existing HTTP surface. The seam is stated rather
+  than hidden; everything the agent does repeatedly is still OFX. If opening is unavailable the agent
+  falls back to a shared account and says so — losing a private account should not stop it trading.
 
 ## 5. Shared infrastructure
 
@@ -395,12 +416,44 @@ baseline is taken once and never revised.
 be attributed to an account by joining `CLIENT_ORDER`, which the archiver deletes, so a session's
 P&L history was not derivable from stored data at all.
 
+**The curve is a rolling window** (docs/stories/003). Points older than `pnl.windowMs` (default 15
+minutes) are evicted on write and on read, so the chart shows recent trading instead of freezing at a
+point ceiling — which is what the previous fixed 20,000-point cap did, while the payload it produced
+grew unbounded because `/api/pnl` serialised every point on every one-second poll (PROBLEMS P17).
+Three bounds, deliberately separate: `windowMs` decides what the chart *means*,
+`pnl.maxPointsPerAccount` (600, roughly the chart's width in pixels) decides what a poll *costs*, and
+`pnl.plotAccounts` (8, the palette size) decides how many accounts carry a curve at all — the rest
+report totals with no points, and the legend says "+N more in the table" rather than dropping them
+silently. Downsampling is stride sampling that keeps the first and last point exactly, since those are
+the two values a reader checks against the axis. **Totals are unaffected by eviction**: they are
+computed live from positions, never summed from the curve.
+
+With an account per agent (§4.2) the chart becomes a comparison *between strategies* — one curve per
+agent instead of two blended ones — which is what it always looked like it was.
+
+**The broker's own accounts are not on it.** The issuer and the market makers are numbered below 100 and
+filtered out of the series before the groups are picked, so they can neither draw a curve nor occupy a
+slot. They hold the entire float, so mark-to-market on it runs three orders of magnitude larger than any
+customer's P&L — measured at +$14.66M against +$2,462 across eight investors — and leaving them in makes
+the chart a picture of the float rather than of the investors it exists to compare.
+
+Measured on a 20-account demo: the oldest retained point tracks the window edge (896 s against 900 s)
+while the curves keep advancing, and the response **plateaus at ~411 KB** rather than growing — 8
+plotted accounts at the 600-point budget. That is the bound working, not a target; `pnl.plotAccounts`
+and `pnl.maxPointsPerAccount` are there to trade detail for bytes if a deployment wants to.
+
 ### 6.4 Control-endpoint exposure
 
 The control endpoints mutate live trading and are **unauthenticated**, consistent with §7.7 ("auth
 realism"). Each component therefore gates them behind one config key — `feed.controls.enabled`
 (exchange) and `web.controls.enabled` (broker) — which, when false, does not register the mutating
-contexts at all and makes the console render read-only. They also bind whatever host the component
+contexts at all and makes the console render read-only.
+
+`POST /api/accounts` (§4.2) sits beside them and is **also unauthenticated**, but differs in kind: it
+*creates funded state* rather than mutating existing state, so anyone who can reach :8083 can mint
+accounts with a seeded balance. It has its own switch (`account.open.enabled`) precisely because it is
+a client operation rather than an operator one — turning the console read-only should not stop agents
+from opening accounts, and refusing to mint accounts should not cost the operator the trading gate. They also bind whatever host the component
 binds, which for the dev defaults is `0.0.0.0`; a non-demo deployment wants both a bind address and
 real authentication. Tracked as §7.8.
 

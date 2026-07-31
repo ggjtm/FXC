@@ -72,7 +72,9 @@ class BrokerWebApiTest {
             assertTrue(status.contains("\"ordersRouted\":0"), status);
             assertTrue(status.contains("\"fills\":0"), status);
 
-            assertTrue(body(client, web, "/api/config").contains("\"controlsEnabled\":true"));
+            String config = body(client, web, "/api/config");
+            assertTrue(config.contains("\"controlsEnabled\":true"), config);
+            assertTrue(config.contains("\"accountsEnabled\":true"), config);
 
             // --- accounts ---
             String accounts = body(client, web, "/api/accounts");
@@ -86,7 +88,10 @@ class BrokerWebApiTest {
             assertTrue(pnl.contains("\"relative\":0.00"), pnl);
             assertTrue(pnl.contains("\"tradeCount\":0"), pnl);
             assertTrue(pnl.contains("\"unpricedHoldings\":0"), pnl);
-            assertTrue(pnl.contains("\"truncated\":false"), pnl);
+            assertTrue(pnl.contains("\"windowMs\":900000"),
+                    "the console needs the window to label its axis: " + pnl);
+            assertTrue(pnl.contains("\"dropped\":0"), pnl);
+            assertTrue(pnl.contains("\"plotted\":true"), pnl);
             assertTrue(pnl.contains("\"n\":0"), "the curve should be anchored at zero trades: " + pnl);
 
             // --- ticker: empty until the exchange reports a trade, then populated ---
@@ -163,6 +168,109 @@ class BrokerWebApiTest {
             assertEquals(404, postRaw(client, web, "/api/trading/start").statusCode());
             assertTrue(body(client, web, "/api/status").contains("\"tradingEnabled\":true"),
                     "no request should have been able to stop trading");
+        }
+    }
+
+    @Test
+    void internalAccountsAreListedButKeptOffTheConsole(@TempDir java.nio.file.Path workDir)
+            throws Exception {
+        // The issuer and market makers sit below 100 and hold the whole float. /api/accounts is the raw
+        // list and still shows them — it is what the account-opening flow reads — but /api/pnl is the
+        // console's view and must not, or mark-to-market on the float buries every customer's P&L.
+        try (BrokerServer broker = BrokerServer.start(
+                "fxc-broker-webinternal", 47598, workDir.toString(),
+                FixSettingsFactory.initiator("127.0.0.1", freePort(), "BROKER1", "EXCHANGE"),
+                "127.0.0.1", 0, "investor", "secret", "FXC-BROKER",
+                accounts -> {
+                    accounts.seedAccount("000000001", "Market Maker", "USD",
+                            Map.of("USD", new BigDecimal("1000000")));
+                    accounts.seedShares("000000001", "ACME", new BigDecimal("500000"),
+                            new BigDecimal("42.00"));
+                    accounts.seedAccount("000100001", "Investor locust-0", "USD",
+                            Map.of("USD", new BigDecimal("1000000")));
+                },
+                null, null, 0, 0, true)) {
+
+            int web = broker.webServer().boundPort();
+            HttpClient client = HttpClient.newHttpClient();
+
+            String accounts = body(client, web, "/api/accounts");
+            assertTrue(accounts.contains("000000001"), "the raw list keeps them: " + accounts);
+            assertTrue(accounts.contains("000100001"), accounts);
+
+            String pnl = body(client, web, "/api/pnl");
+            assertTrue(pnl.contains("000100001"), "the customer is on the console: " + pnl);
+            assertFalse(pnl.contains("000000001"), "the market maker is not: " + pnl);
+        }
+    }
+
+    @Test
+    void opensAccountsForAgentsIdempotentlyPerClientId(@TempDir java.nio.file.Path workDir)
+            throws Exception {
+        try (BrokerServer broker = BrokerServer.start(
+                "fxc-broker-webopen", 47596, workDir.toString(),
+                FixSettingsFactory.initiator("127.0.0.1", freePort(), "BROKER1", "EXCHANGE"),
+                "127.0.0.1", 0, "investor", "secret", "FXC-BROKER",
+                accounts -> {
+                    accounts.configureOpening(new com.fxc.broker.account.AccountOpeningPolicy(
+                            true, "USD", new BigDecimal("1000000"), "ACME", new BigDecimal("1000"),
+                            new BigDecimal("42.00"), 100_000L, 9));
+                    accounts.seedAccount(ACCOUNT, "Dev Investor", "USD",
+                            Map.of("USD", new BigDecimal("1000")));
+                },
+                null, null, 0, 0, true)) {
+
+            int web = broker.webServer().boundPort();
+            HttpClient client = HttpClient.newHttpClient();
+
+            HttpResponse<String> opened = postRaw(client, web, "/api/accounts?clientId=locust-0");
+            assertEquals(201, opened.statusCode(), opened.body());
+            assertTrue(opened.body().contains("\"opened\":true"), opened.body());
+
+            HttpResponse<String> again = postRaw(client, web, "/api/accounts?clientId=locust-0");
+            assertEquals(200, again.statusCode(), "the second call found it rather than minting one");
+            assertTrue(again.body().contains("\"opened\":false"), again.body());
+            // Same account both times: a respawning agent must not fragment its P&L.
+            String account = opened.body().replaceAll(".*\"account\":\"([0-9]+)\".*", "$1");
+            assertTrue(again.body().contains("\"account\":\"" + account + "\""), again.body());
+
+            // A second client gets its own, and both show up in the list and the P&L table.
+            assertEquals(201, postRaw(client, web, "/api/accounts?clientId=locust-1").statusCode());
+            String accounts = body(client, web, "/api/accounts");
+            assertTrue(accounts.contains(account), accounts);
+            assertTrue(body(client, web, "/api/status").contains("\"accounts\":3"),
+                    "the seeded dev account plus the two opened ones");
+            // Opened mid-session, so its curve is anchored rather than starting at its first fill.
+            assertTrue(body(client, web, "/api/pnl").contains("\"account\":\"" + account + "\""));
+
+            // A missing client id is the caller's error, not a server fault.
+            assertEquals(400, postRaw(client, web, "/api/accounts").statusCode());
+            assertEquals(400, postRaw(client, web, "/api/accounts?clientId=").statusCode());
+        }
+    }
+
+    @Test
+    void accountOpeningCanBeDisabledWithoutDisablingTheConsole(@TempDir java.nio.file.Path workDir)
+            throws Exception {
+        try (BrokerServer broker = BrokerServer.start(
+                "fxc-broker-webnoopen", 47597, workDir.toString(),
+                FixSettingsFactory.initiator("127.0.0.1", freePort(), "BROKER1", "EXCHANGE"),
+                "127.0.0.1", 0, "investor", "secret", "FXC-BROKER",
+                accounts -> accounts.seedAccount(ACCOUNT, "Dev Investor", "USD",
+                        Map.of("USD", new BigDecimal("1000"))),
+                null, null, 0, 0, true, com.fxc.broker.ofx.OfxHttpServer.DEFAULT_THREADS,
+                com.fxc.broker.pnl.PnlSettings.defaults(), false)) {
+
+            int web = broker.webServer().boundPort();
+            HttpClient client = HttpClient.newHttpClient();
+
+            assertEquals(404, postRaw(client, web, "/api/accounts?clientId=locust-0").statusCode());
+            assertTrue(body(client, web, "/api/config").contains("\"accountsEnabled\":false"));
+            // The operator controls are a separate switch and are still live.
+            assertTrue(body(client, web, "/api/config").contains("\"controlsEnabled\":true"));
+            assertEquals(200, postRaw(client, web, "/api/trading/stop").statusCode());
+            // Listing still works: disabling opening does not hide the accounts that exist.
+            assertTrue(body(client, web, "/api/accounts").contains(ACCOUNT));
         }
     }
 

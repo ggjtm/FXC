@@ -118,5 +118,67 @@ class ResolutionTest(unittest.TestCase):
         self.assertIn("rando", strategies.NAIVE)
 
 
+class RandoTouchTest(unittest.TestCase):
+    """``rando`` takes the touch when there is one — and must survive a book that has only one side.
+
+    A long-only market empties a side routinely: with cash-only investors (stories/004) nobody can sell
+    until they have bought, so the offer side can be empty for long stretches. Asking for the best price
+    on an empty side is what ``min()``/``max()`` raise on, and a strategy that raises does not skip a
+    tick — it kills the locust task and the investor places nothing.
+    """
+
+    def _market(self, levels):
+        market = strategies.MarketView()
+        market.set_last_sale("ACME", Decimal("42.10"))
+        if levels is not None:
+            market.set_book("ACME", levels)
+        return market
+
+    def test_buys_the_best_offer(self):
+        market = self._market([("OFFER", Decimal("42.20"), Decimal("10")),
+                               ("OFFER", Decimal("42.15"), Decimal("10")),
+                               ("BID", Decimal("42.00"), Decimal("10"))])
+        prices = {strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).price
+                  for s in range(40)
+                  if strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).side == "BUY"}
+        self.assertEqual({Decimal("42.15")}, prices, "a buy lifts the best offer")
+
+    def test_sells_the_best_bid(self):
+        market = self._market([("BID", Decimal("42.00"), Decimal("10")),
+                               ("BID", Decimal("42.05"), Decimal("10")),
+                               ("OFFER", Decimal("42.20"), Decimal("10"))])
+        prices = {strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).price
+                  for s in range(40)
+                  if strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).side == "SELL"}
+        self.assertEqual({Decimal("42.05")}, prices, "a sell hits the best bid")
+
+    def test_an_empty_side_falls_back_instead_of_raising(self):
+        # The state a long-only market spends most of its time in.
+        bids_only = self._market([("BID", Decimal("42.00"), Decimal("10"))])
+        offers_only = self._market([("OFFER", Decimal("42.20"), Decimal("10"))])
+        for market in (bids_only, offers_only, self._market([]), self._market(None)):
+            for seed in range(30):
+                intent = strategies.RandoStrategy().decide("ACME", market, None, random.Random(seed))
+                self.assertIsNotNone(intent)
+                self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
+
+    def test_a_book_for_another_symbol_is_not_a_book_for_this_one(self):
+        market = strategies.MarketView()
+        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_book("GLOBEX", [("OFFER", Decimal("11.00"), Decimal("5"))])
+        intent = strategies.RandoStrategy().decide("ACME", market, None, random.Random(1))
+        self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
+
+    def test_every_price_is_on_the_tick_grid(self):
+        # Off-tick prices are rejected by the exchange asynchronously, after the OFX reply said ROUTED.
+        market = self._market([("OFFER", Decimal("42.20"), Decimal("10")),
+                               ("BID", Decimal("42.00"), Decimal("10"))])
+        for seed in range(60):
+            for m in (market, self._market([])):
+                price = strategies.RandoStrategy().decide("ACME", m, None, random.Random(seed)).price
+                self.assertEqual(Decimal(0), price % Decimal("0.01"), price)
+
+
+
 if __name__ == "__main__":
     unittest.main()

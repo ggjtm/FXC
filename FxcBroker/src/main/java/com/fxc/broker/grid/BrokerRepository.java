@@ -21,13 +21,37 @@ public final class BrokerRepository {
     }
 
     public void upsertAccount(String accountNumber, String ownerName, String baseCcy) {
-        run("MERGE INTO ACCOUNT (account_number, owner_name, base_ccy) VALUES (?, ?, ?)",
-                accountNumber, ownerName, baseCcy);
+        upsertAccount(accountNumber, ownerName, baseCcy, null);
+    }
+
+    /** @param clientId the agent that owns this account, or {@code null} for a seeded dev account. */
+    public void upsertAccount(String accountNumber, String ownerName, String baseCcy, String clientId) {
+        run("MERGE INTO ACCOUNT (account_number, owner_name, base_ccy, client_id) VALUES (?, ?, ?, ?)",
+                accountNumber, ownerName, baseCcy, clientId);
     }
 
     public boolean accountExists(String accountNumber) {
         return !sql.query(new SqlFieldsQuery("SELECT 1 FROM ACCOUNT WHERE account_number = ?")
                 .setArgs(accountNumber)).getAll().isEmpty();
+    }
+
+    /** The account already opened for this client id, if any (docs/stories/004). */
+    public String accountForClient(String clientId) {
+        List<List<?>> rows = sql.query(new SqlFieldsQuery(
+                "SELECT account_number FROM ACCOUNT WHERE client_id = ?").setArgs(clientId)).getAll();
+        return rows.isEmpty() ? null : (String) rows.get(0).get(0);
+    }
+
+    /**
+     * The highest account number in use, or {@code null} if there are none.
+     *
+     * <p>Account numbers are fixed-width digit strings, so ordering them as text orders them
+     * numerically — which is what makes "next = max + 1" work without a sequence table.
+     */
+    public String maxAccountNumber() {
+        List<List<?>> rows = sql.query(new SqlFieldsQuery(
+                "SELECT MAX(account_number) FROM ACCOUNT")).getAll();
+        return rows.isEmpty() ? null : (String) rows.get(0).get(0);
     }
 
     public void upsertPosition(Position p) {

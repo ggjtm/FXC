@@ -10,6 +10,14 @@
   #notice { display: none; padding: 6px 14px; font-size: 12px; color: var(--status-warn); }
   #notice.is-shown { display: block; }
 </style>
+  <style>
+    /* Three labelled legend sections (stories/005): the grouping is this console's, not the shared
+       theme's, so the CSS lives here rather than in fxc-common. */
+    .fxc-legend { flex-wrap: wrap; gap: 4px 18px; }
+    .fxc-legend-group { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .fxc-legend-label { font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+                        color: var(--muted); }
+  </style>
 </head>
 <body>
 

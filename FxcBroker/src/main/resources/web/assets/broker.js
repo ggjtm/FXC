@@ -13,9 +13,20 @@
  *  - Colour follows the account, assigned from the fixed categorical order by sorted account number.
  *    Adding or removing an account never repaints the others.
  *
+ *  - The curve is a ROLLING WINDOW (stories/003): the backend keeps the last `windowMs` of points and
+ *    drops the rest, so this shows recent trading rather than a session that eventually froze. The
+ *    axis says which window it is, because a chart that quietly forgets its left edge is a chart that
+ *    lies about its own x range.
+ *
+ *  - With an account per agent (stories/004) there are more accounts than the palette has colours, so
+ *    the backend plots three groups of five — the best by P&L, the most active, and the worst — and
+ *    tags each account with the `groups` it is in. Colour follows the GROUP, not the account: green
+ *    for winners, blue for the most active, red for losers, so a glance at the chart says which
+ *    question each line answers. Accounts in two groups (the most active is often also the worst) are
+ *    drawn once, in the first group that claims them. The table below still lists every account.
+ *
  *  - Everything plotted is also in the table below, and any account the backend could not fully value
- *    (unpriced holdings) or whose curve stopped being recorded (truncated) is called out in text
- *    rather than silently drawn as if complete.
+ *    (unpriced holdings) is called out in text rather than silently drawn as if complete.
  *
  *  - The broker polls its own REST endpoints once a second instead of opening a WebSocket: the
  *    console then keeps working when the exchange's feed service is switched off, and it reads the
@@ -130,6 +141,43 @@
     });
   }
 
+  //  Group palettes: five shades apiece, so five lines in a group stay distinguishable while the hue
+  //  still says which group it is. Local to this console — the shared theme's --series-* slots are a
+  //  categorical scale, and this is three ordered scales.
+  var GROUP_COLORS = {
+    top:    ["#1a7f4f", "#26a269", "#3fbc82", "#63d3a0", "#8fe4be"],
+    active: ["#1f6fd0", "#3987e5", "#5da3f0", "#87bdf7", "#b3d6fb"],
+    bottom: ["#a51d2d", "#c01c28", "#e01b24", "#ee5a60", "#f79ba0"]
+  };
+  var GROUP_LABELS = { top: "Best P&L", active: "Most active", bottom: "Worst P&L" };
+  var GROUP_ORDER = ["top", "active", "bottom"];
+
+  /** Which group owns an account's colour: the first of the three that claims it. */
+  function groupOf(account) {
+    var groups = account.groups || [];
+    for (var i = 0; i < GROUP_ORDER.length; i++) {
+      if (groups.indexOf(GROUP_ORDER[i]) >= 0) {
+        return GROUP_ORDER[i];
+      }
+    }
+    return null;
+  }
+
+  /** Assign each plotted account a shade of its group's hue, ranked within the group. */
+  function assignGroupColors(accounts) {
+    var seen = {};
+    state.colorOf = {};
+    GROUP_ORDER.forEach(function (group) {
+      var members = accounts.filter(function (a) { return groupOf(a) === group; });
+      members.forEach(function (account, index) {
+        var palette = GROUP_COLORS[group];
+        state.colorOf[account.account] = palette[index % palette.length];
+        seen[account.account] = group;
+      });
+    });
+    return seen;
+  }
+
   /** Stable slot per account: sorted account order, so a new account never recolours the others. */
   function assignColors() {
     var accounts = state.pnl.map(function (p) { return p.account; }).sort();
@@ -236,6 +284,7 @@
   function render() {
     var box = plotBox();
     var accounts = plotted();
+    assignGroupColors(accounts);
     svg.attr("viewBox", "0 0 " + box.w + " " + box.h);
     svg.selectAll("*:not(title)").remove();
     el.empty.style.display = accounts.length ? "none" : "flex";
@@ -289,7 +338,7 @@
     root.append("text")
       .attr("x", box.iw / 2).attr("y", box.ih + 26)
       .attr("text-anchor", "middle").attr("fill", colors.muted)
-      .attr("font-size", 10).text("cumulative trades");
+      .attr("font-size", 10).text("cumulative trades · " + windowLabel(accounts));
 
     var line = d3.line()
       .x(function (p) { return x(p.n); })
@@ -335,25 +384,64 @@
     renderOverlay();
   }
 
+  /** "last 15 min" — what the backend says its window is, not what this file assumes. */
+  function windowLabel(accounts) {
+    var ms = accounts.length && accounts[0].windowMs ? +accounts[0].windowMs : 0;
+    if (!ms) {
+      return "session";
+    }
+    var minutes = Math.round(ms / 60000);
+    return minutes >= 1 ? "last " + minutes + " min" : "last " + Math.round(ms / 1000) + " s";
+  }
+
+  /** Accounts the backend chose not to plot — reported, never silently missing. */
+  function foldedAway() {
+    return state.pnl.filter(function (p) { return !(p.points && p.points.length); }).length;
+  }
+
   function renderLegend(accounts) {
     el.legend.textContent = "";
-    if (accounts.length < 2) {
-      // A single series needs no legend — the chart title and the direct label name it.
+    var folded = foldedAway();
+    if (!accounts.length) {
       return;
     }
-    accounts.forEach(function (account) {
-      var item = document.createElement("span");
-      item.className = "fxc-legend-item";
-      var swatch = document.createElement("span");
-      swatch.className = "fxc-legend-swatch";
-      swatch.style.background = colorFor(account.account);
-      item.appendChild(swatch);
-      item.appendChild(document.createTextNode(account.account + " "));
-      var value = document.createElement("b");
-      value.textContent = Fxc.fmt.signed(+account.relative);
-      item.appendChild(value);
-      el.legend.appendChild(item);
+    // One section per group, in a fixed order, so the eye learns where to look. An account that is in
+    // two groups is listed under each — it really is both the most active and the worst — but it is
+    // drawn once, in its colour-owning group.
+    GROUP_ORDER.forEach(function (group) {
+      var members = accounts.filter(function (a) { return (a.groups || []).indexOf(group) >= 0; });
+      if (!members.length) {
+        return;
+      }
+      var section = document.createElement("span");
+      section.className = "fxc-legend-group";
+      var label = document.createElement("span");
+      label.className = "fxc-legend-label";
+      label.textContent = GROUP_LABELS[group];
+      section.appendChild(label);
+      members.forEach(function (account) {
+        var item = document.createElement("span");
+        item.className = "fxc-legend-item";
+        var swatch = document.createElement("span");
+        swatch.className = "fxc-legend-swatch";
+        swatch.style.background = colorFor(account.account);
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(account.account + " "));
+        var value = document.createElement("b");
+        value.textContent = Fxc.fmt.signed(+account.relative);
+        item.appendChild(value);
+        section.appendChild(item);
+      });
+      el.legend.appendChild(section);
     });
+    if (folded) {
+      // The chart shows fifteen accounts at most; the table below has all of them.
+      var rest = document.createElement("span");
+      rest.className = "fxc-legend-item";
+      rest.style.color = colors.muted;
+      rest.textContent = "+" + folded + " more in the table";
+      el.legend.appendChild(rest);
+    }
   }
 
   // ---------- hover ----------
@@ -499,9 +587,7 @@
         messages.push(account.account + ": " + account.unpricedHoldings
           + " holding(s) excluded from equity (no price available)");
       }
-      if (account.truncated) {
-        messages.push(account.account + ": P&L curve stopped recording (point limit reached)");
-      }
+
     });
     if (messages.length) {
       el.notice.textContent = "⚠ " + messages.join(" · ");

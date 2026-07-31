@@ -10,9 +10,12 @@ import com.fxc.broker.model.Side;
 import com.fxc.common.instrument.Instrument;
 import com.fxc.common.instrument.InstrumentCatalog;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
@@ -84,6 +87,32 @@ public final class OmsService {
         return rejected.get();
     }
 
+    /** Execution reports ignored because their id had already been applied. */
+    public long duplicateReportCount() {
+        return duplicateReports.get();
+    }
+
+    /** Execution reports ignored because their side disagreed with the order that id resolves to. */
+    public long mismatchedReportCount() {
+        return mismatchedReports.get();
+    }
+
+    /** How many recent execution ids to remember for the duplicate check. */
+    private static final int MAX_REMEMBERED_EXEC_IDS = 200_000;
+
+    private final AtomicLong duplicateReports = new AtomicLong();
+    private final AtomicLong mismatchedReports = new AtomicLong();
+
+    /** Reports already applied, so a resend cannot move balances twice. */
+    private final Set<String> appliedExecIds = Collections.newSetFromMap(
+            new LinkedHashMap<String, Boolean>(1024, 0.75f, false) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    // Bounded: a demo can fill for hours, and only recent ids can plausibly be resent.
+                    return size() > MAX_REMEMBERED_EXEC_IDS;
+                }
+            });
+
     /** Validate, persist, and route a new client order. */
     public synchronized OrderResult submit(String account, String clientOrderId, String symbol,
                                            Side side, OrderType type, BigDecimal price, BigDecimal quantity) {
@@ -102,6 +131,19 @@ public final class OmsService {
         }
 
         ClientOrder order = new ClientOrder(clientOrderId, account, symbol, side, type, price, quantity);
+        // A client order id is this broker's primary key for an order, so a repeat is not a harmless
+        // duplicate — the old mapping is what later ExecutionReports are resolved through. Overwriting
+        // it silently applied one client's fills to another client's order (docs/PROBLEMS.md P18);
+        // rejecting is also what a real OMS does with a reused ClOrdID.
+        if (orders.containsKey(clientOrderId)) {
+            // Rejected *without storing*: the normal reject path puts the order in the map and MERGEs
+            // it into CLIENT_ORDER, both keyed on this id — so rejecting through it would still
+            // destroy the original order it is protecting.
+            order.setStatus(OrderStatus.REJECTED);
+            order.setRejectReason("duplicate client order id: " + clientOrderId);
+            rejected.incrementAndGet();
+            return OrderResult.rejected(order, order.rejectReason());
+        }
         Optional<String> rejection = accountService.check(account, instrument, side, price, quantity);
         if (rejection.isPresent()) {
             return reject(order, rejection.get());
@@ -121,13 +163,38 @@ public final class OmsService {
         return OrderResult.accepted(order);
     }
 
-    /** Handle an inbound ExecutionReport from the exchange. */
+    /**
+     * Handle an inbound ExecutionReport from the exchange.
+     *
+     * <p><b>Applied at most once per {@code execId}.</b> A fill moves real balances, so a report
+     * delivered twice — a FIX resend after a reconnect, a {@code PossDupFlag} replay — would create
+     * shares and destroy cash. The execution table has always deduplicated (it MERGEs on
+     * {@code exec_id}), which meant a double-apply corrupted balances while leaving no trace in the
+     * archive (docs/PROBLEMS.md P18).
+     *
+     * @param reportedSide the side the exchange says filled, or {@code null} if the report carried
+     *     none. Checked against the stored order rather than trusted or ignored: a disagreement means
+     *     this report belongs to a different order than the one this id resolves to, and applying it
+     *     would move the wrong account's balances.
+     */
     public synchronized void onExecutionReport(String clientOrderId, String execId, String exchangeOrderId,
                                                boolean isFill, boolean isReject, BigDecimal lastQty,
-                                               BigDecimal lastPx, BigDecimal cumQty, String text) {
+                                               BigDecimal lastPx, BigDecimal cumQty, String text,
+                                               Side reportedSide) {
         ClientOrder order = orders.get(clientOrderId);
         if (order == null) {
             return; // unknown order (e.g. late report after restart) — ignore
+        }
+        if (isFill && execId != null && !appliedExecIds.add(execId)) {
+            duplicateReports.incrementAndGet();
+            return; // already applied; applying it again would invent shares or cash
+        }
+        if (isFill && reportedSide != null && reportedSide != order.side()) {
+            // The exchange filled a different order than this id resolves to here. Do not guess.
+            mismatchedReports.incrementAndGet();
+            System.err.println("ExecutionReport for " + clientOrderId + " reports " + reportedSide
+                    + " but that id is a " + order.side() + " order — ignoring, balances untouched");
+            return;
         }
         if (exchangeOrderId != null) {
             order.setExchangeOrderId(exchangeOrderId);

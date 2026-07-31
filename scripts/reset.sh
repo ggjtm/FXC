@@ -88,7 +88,12 @@ running_components() {
 
 busy_ports() {
   # 8082 broker OFX, 8083 broker console, 8090 exchange feed, 9876/9878 FIX acceptors.
-  lsof -ti:8082,8083,8090,9876,9878 2>/dev/null || true
+  #
+  # `-sTCP:LISTEN` is load-bearing: without it lsof also reports processes holding *client* sockets on
+  # those ports, which on this stack means Docker's backend proxying the Locust container's connection
+  # to the host broker — and a lingering TIME_WAIT would refuse a reset with nothing running at all.
+  # Found by hitting it.
+  lsof -ti:8082,8083,8090,9876,9878 -sTCP:LISTEN 2>/dev/null || true
 }
 
 if [[ -n "$(running_components)" || -n "$(busy_ports)" ]]; then

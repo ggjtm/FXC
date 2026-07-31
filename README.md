@@ -100,12 +100,14 @@ and vendored D3 bundle from the `fxc-common` jar.
 | Console | URL | Main pane | Dropdown controls |
 |---|---|---|---|
 | **FxcExchange** | http://localhost:8090/ | 1-minute candles for a selectable security, translucent volume underlay in the bottom 20%, right-side volume-by-price histogram; live over a WebSocket when the interval end is left open | Stop/start trading (all symbols or just the selected one), clear the order book |
-| **FxcBroker** | http://localhost:8083/ | Last-sale ticker from the exchange feed, plus one line per account of cumulative trades vs. session P&L, with a legend and a table view | Stop/start trading |
-| **Locust load harness** | http://localhost:8089/ | Live request rate, latency, and business outcomes for the investor workload, broken out per investor type | Start/stop the run and change users, spawn rate, or **how many of each investor type** — all while it runs |
+| **FxcBroker** | http://localhost:8083/ | Last-sale ticker from the exchange feed, plus one line per *agent* of cumulative trades vs. session P&L over a rolling 15-minute window, with a legend and a table view | Stop/start trading |
+| **Locust load harness** | http://localhost:8089/ | Live request rate, latency, and business outcomes for the investor workload, broken out per investor type. **Starts idle — press Start.** | Start/stop the run and change users, spawn rate, or **how many of each investor type** — all while it runs |
 
 REST surfaces: exchange `/api/candles`, `/api/symbols`, `/api/status`, `/api/book`, `/api/config`
 (+ `POST /api/session/halt|open`, `/api/book/clear`); broker `/api/status`, `/api/accounts`,
-`/api/lastsale`, `/api/pnl`, `/api/config` (+ `POST /api/trading/start|stop`).
+`/api/lastsale`, `/api/pnl`, `/api/config` (+ `POST /api/trading/start|stop`, and
+`POST /api/accounts?clientId=…` which is how each agent opens its own account —
+FxcBroker/docs/stories/004).
 
 The control endpoints mutate live trading and are **unauthenticated** — fine for a localhost demo, not
 for anything else (DESIGN §7.8). Set `feed.controls.enabled = false` (exchange) or
@@ -125,7 +127,16 @@ That last leg is **silent**: `FeedClient` folds each `FILLED: ...` status into t
 without logging it, so the agent logs show order flow, not feed traffic. To see the leg asserted
 explicitly, run `EndToEndDemoIT` (below).
 
-**It runs continuously until you press Ctrl-C.**
+**It starts cold, and runs continuously until you press Ctrl-C.** The exchange boots with the market
+**halted** and the Locust harness boots **idle**, so both starts are yours to make:
+
+1. `scripts/demo.sh` brings the stack up and waits, printing where to open the market.
+2. Open it — `http://localhost:8090/` → Controls → Start trading (or
+   `curl -X POST localhost:8090/api/session/open`). The script sees it and starts the two
+   market-making agents; fills begin.
+3. Press **Start** at `http://localhost:8089/` to add the investor swarm on top.
+
+`--batch` opens the market itself, because the unattended smoke test must not need a human.
 
 ```sh
 scripts/demo.sh               # continuous; consoles + Locust UI live (brings up docker itself)
@@ -138,6 +149,15 @@ The two **Java** agents use `booker` rather than `rando` because `booker` is liq
 scales buying to available cash and sells to keep a cash floor, so the flow is sustainable
 indefinitely. `rando` is naive by design and a continuous run of *only* it would exhaust one side of an
 account and degrade into rejections. Override with `FXC_AGENT_STRATEGY`.
+
+**Every agent trades its own account, funded with cash.** The two Java agents and each Locust investor
+open one at startup (`POST /api/accounts`, idempotent per client id), so the broker console's
+per-account P&L is one agent's rather than a blend — and `rando` draws down only its own balance.
+Opened accounts get **cash only**: the tradable float is what the seeded dev accounts hold
+(`account.seedShares`), so adding investors brings capital to the market instead of inflating the
+supply of stock (docs/PROBLEMS.md P19). The seeded dev accounts
+remain for the REPL and `-Daccount=`. Set `account.open.enabled = false` (broker) to go back to
+sharing.
 
 The **Locust** investors run **one of each type** by default — `rando`, `booker` and `bookfish` — and
 the number of each is a live control in the UI (`loadgen/README.md`). So the demo does show `rando`

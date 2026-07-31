@@ -113,3 +113,28 @@ and a structural scan. Someone should open both consoles and look at them.
 
 Authentication and a bind address for the control endpoints (root DESIGN §7.8). Book-depth
 visualisation, an order blotter, and per-candle volume-by-price (the histogram is window-aggregate).
+
+## Addendum (2026-07-30): the session starts halted
+
+`session.startClosed = true` makes the standalone exchange boot with the market **halted**, so the
+first thing the console's Controls menu is good for is starting the demo rather than interrupting it.
+Opening the market is now a visible act — which is the point: previously a demo arrived mid-flight,
+with agents already trading before anyone had looked at a console.
+
+Three details worth knowing:
+
+- **Config-only.** `ExchangeServer.start(...)` still boots an open market, so nothing embedded — every
+  integration test that submits an order — has to learn about session state. Only `Main` reads the key.
+- **Not atomic with boot.** The halt lands immediately *after* `start()` returns, so the FIX acceptor is
+  listening for a few milliseconds first. Nothing is connected then in a normal start; restarting the
+  exchange underneath a live broker is the one case where an order could squeeze through. Threading a
+  flag through four `start` overloads was not worth closing a window nobody can reach.
+- **The footgun is guarded.** `session.startClosed = true` with `feed.controls.enabled = false` is a
+  market nothing can open; the exchange says so loudly at startup instead of leaving it to be
+  discovered.
+
+`scripts/demo.sh` waits for the market to open before starting its agents, rather than letting them
+submit into the halt — a halted market rejects at the exchange and that rejection arrives
+asynchronously, so the OFX reply still says `ROUTED` and agents trading into a halt look like a working
+demo that never fills. `--batch` opens the market itself, because the unattended path must not need a
+human.

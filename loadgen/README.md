@@ -23,9 +23,12 @@ open http://localhost:8089
 `scripts/demo.sh --no-load` starts the stack without it; `scripts/demo.sh --batch` runs the old bounded
 20-tick walkthrough and exits.
 
-It begins swarming immediately (`LOCUST_AUTOSTART=true`) at 8 users / spawn rate 2 — roughly 5
-orders/sec, significant for a laptop and far short of a load test. Change users and spawn rate in the
-UI while it runs; that is the point.
+It comes up **idle** (`LOCUST_AUTOSTART=false`): users, spawn rate and the mix shares are prefilled, and
+nothing runs until you press **Start**. That matches the exchange, which now boots with the market
+halted — adding load is a deliberate act you can show rather than something already happening when you
+open the page. The prefilled 8 users / spawn rate 2 is roughly 5 orders/sec, significant for a laptop
+and far short of a load test; change users and spawn rate in the UI *while it runs*, which is the point
+of Locust. Set `FXC_LOADGEN_AUTOSTART=true` for an unattended run.
 
 **Host virtualenv (for iterating on the harness).** `scripts/loadtest.sh` does the venv setup, checks
 the broker is actually up, and passes anything it does not recognise straight through to `locust`:
@@ -72,6 +75,17 @@ shows **one** user class and no per-class breakdown; the mix is reported in the 
 rows below. Per-class user counts were the obvious alternative and cannot be changed mid-run — see
 `../docs/PROBLEMS.md` P16 for the autopsy.
 
+## One account per investor
+
+Each investor opens its own broker account at startup (`FxcInvestor/docs/stories/004`), so the broker
+console at :8083 shows one P&L curve per investor rather than a blend of everything sharing a dev
+account. Identity is a **slot**, not a spawn counter: an investor claims the lowest free slot on start
+and releases it on stop, so `locust-0…locust-15` — and their accounts — are reused across ramps and
+re-mixes instead of opening a fresh funded account per spawn.
+
+If the console is unreachable or the broker has `account.open.enabled = false`, the harness logs it
+once and falls back to sharing `--accounts`. It never fails a run over it.
+
 ## Reading the UI
 
 **Every OFX failure comes back as HTTP 200.** A wrong password returns a signon-only envelope; a
@@ -103,7 +117,9 @@ second, and the rest take effect on the next swarm.
 |---|---|---|---|
 | `FXC_OFX_USER` | `--ofx-user` | `investor` | must match FxcBroker's `ofx.user` |
 | `FXC_OFX_PASSWORD` | `--ofx-password` | `secret` | must match `ofx.password` — a mismatch is invisible in HTTP status |
-| `FXC_ACCOUNTS` | `--accounts` | `000123456,000654321` | users spread round-robin, so both P&L lines move |
+| `FXC_BROKER_CONSOLE_URL` | `--broker-console-url` | *(empty)* | FxcBroker console; each investor opens **its own account** there, so the console's per-account P&L is per investor. Empty falls back to `--accounts` |
+| `FXC_CLIENT_PREFIX` | `--client-prefix` | `locust` | client-id prefix for opened accounts (`locust-0`, `locust-1`, …) |
+| `FXC_ACCOUNTS` | `--accounts` | `000000001,000000002` | shared fallback (the market-maker accounts), used only when opening is unavailable; investors spread round-robin |
 | `FXC_SYMBOLS` | `--symbols` | `ACME` | |
 | `FXC_MIX_RANDO` | `--mix-rando` | `0` | share of users running `rando`; all three at 0 means **one of each** |
 | `FXC_MIX_BOOKER` | `--mix-booker` | `0` | |
@@ -178,6 +194,7 @@ fxc_loadgen/liquidity.py   cash-scaled sizing + liquidity floor (twin of Liquidi
 fxc_loadgen/patience.py    bookfish's wait-for-an-advantage gate (twin of PatientStrategy)
 fxc_loadgen/mix.py         shares -> counts -> minimal-churn strategy reassignment
 fxc_loadgen/marketfeed.py  market-wide traded volume from the exchange's chart feed
+fxc_loadgen/accounts.py    slot pool + per-investor broker accounts (stories/004)
 fxc_loadgen/instruments.py tick + lot table, mirroring fxc-common's InstrumentCatalog
 tests/                     stdlib unittest (tests/test_population.py skips itself without locust)
 ```

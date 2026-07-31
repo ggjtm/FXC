@@ -64,7 +64,7 @@ import gevent
 from locust import HttpUser, between, events, task
 from locust.runners import STATE_RUNNING
 
-from fxc_loadgen import instruments, liquidity, marketfeed, mix, ofx, patience, strategies
+from fxc_loadgen import accounts, instruments, liquidity, marketfeed, mix, ofx, patience, strategies
 
 # --------------------------------------------------------------------------- configuration
 
@@ -90,8 +90,16 @@ def _add_arguments(parser):
                         help="OFX signon user (must match FxcBroker's ofx.user)")
     parser.add_argument("--ofx-password", default=_env("FXC_OFX_PASSWORD", "secret"),
                         help="OFX signon password (must match FxcBroker's ofx.password)")
-    parser.add_argument("--accounts", default=_env("FXC_ACCOUNTS", "000123456,000654321"),
-                        help="comma-separated accounts; users are spread across them round-robin")
+    parser.add_argument("--accounts", default=_env("FXC_ACCOUNTS", "000000001,000000002"),
+                        help="comma-separated accounts, used only when account opening is off or "
+                             "unavailable; investors are spread across them round-robin")
+    parser.add_argument("--broker-console-url", default=_env("FXC_BROKER_CONSOLE_URL", ""),
+                        help="FxcBroker console base URL (e.g. http://localhost:8083). Each investor "
+                             "opens its own account there, so its P&L on the console is its own. "
+                             "Empty falls back to --accounts.")
+    parser.add_argument("--client-prefix", default=_env("FXC_CLIENT_PREFIX", accounts.DEFAULT_PREFIX),
+                        help="client-id prefix for opened accounts; keeps two harness processes from "
+                             "claiming each other's accounts")
     parser.add_argument("--symbols", default=_env("FXC_SYMBOLS", "ACME"),
                         help="comma-separated symbols to trade")
     parser.add_argument("--strategy", default=_env("FXC_STRATEGY", ""),
@@ -169,6 +177,15 @@ POPULATION: list[InvestorUser] = []
 _feed_greenlet = None
 _mix_greenlet = None
 
+#: Slots, client ids and the account each holds — built at test start when a console URL is configured
+#: (``fxc_loadgen.accounts``). One per process, so a re-mix or a ramp reuses identities instead of
+#: opening an account per spawn.
+_registry = None
+
+#: Logged once rather than per investor: a broker that will not open accounts says so at the same
+#: volume whether it is refusing one investor or sixteen.
+_open_failure_reported = False
+
 
 def _split(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
@@ -213,12 +230,13 @@ class InvestorUser(HttpUser):
         options = self.environment.parsed_options
         index = next(_user_index)
 
-        accounts = _split(options.accounts)
+        fallback_accounts = _split(options.accounts)
         symbols = _split(options.symbols)
-        if not accounts or not symbols:
+        if not fallback_accounts or not symbols:
             raise ValueError("--accounts and --symbols must each name at least one value")
 
-        self.account = accounts[index % len(accounts)]
+        self.slot = None
+        self.account = self._claim_account(fallback_accounts, index)
         self.symbols = symbols
         self.ofx_user = options.ofx_user
         self.ofx_password = options.ofx_password
@@ -260,6 +278,24 @@ class InvestorUser(HttpUser):
             POPULATION.remove(self)
         except ValueError:
             pass
+        # Give the slot back so the next investor is this same client rather than a new one — that is
+        # what stops a ramp cycle opening a fresh account every time (stories/004).
+        if self.slot is not None and _registry is not None:
+            _registry.release(self.slot)
+            self.slot = None
+
+    def _claim_account(self, fallback_accounts: list[str], index: int) -> str:
+        """This investor's own account, or a share of the seeded ones if opening is unavailable."""
+        global _open_failure_reported
+        if _registry is not None:
+            try:
+                self.slot, account = _registry.claim()
+                return account
+            except accounts.AccountError as error:
+                if not _open_failure_reported:
+                    _open_failure_reported = True
+                    _log(f"could not open an account, sharing {fallback_accounts} instead: {error}")
+        return fallback_accounts[index % len(fallback_accounts)]
 
     def adopt(self, name: str, options) -> None:
         """Switch to a strategy, and take the current patience thresholds.
@@ -509,8 +545,18 @@ def _poll_market_feed(environment) -> None:
 
 @events.test_start.add_listener
 def _announce(environment, **_kwargs):
-    global _feed_greenlet, _mix_greenlet
+    global _feed_greenlet, _mix_greenlet, _registry, _open_failure_reported
     options = environment.parsed_options
+
+    console_url = options.broker_console_url.strip()
+    if console_url and _registry is None:
+        _registry = accounts.AccountRegistry(console_url, prefix=options.client_prefix)
+        _open_failure_reported = False
+        _log(f"each investor opens its own account at {console_url} "
+             f"(client ids {options.client_prefix}-0, -1, …)")
+    elif not console_url:
+        _log(f"no --broker-console-url: investors share {options.accounts}, so the broker console's "
+             "per-account P&L blends them")
     _log(
         f"target={environment.host} accounts={options.accounts} symbols={options.symbols} "
         f"seed={options.seed}"

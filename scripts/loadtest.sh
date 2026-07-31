@@ -88,6 +88,10 @@ fi
 # FXC_EXCHANGE_URL= (empty) to run without it.
 export FXC_EXCHANGE_URL="${FXC_EXCHANGE_URL-http://localhost:8090}"
 
+# Each investor opens its own broker account (stories/004) so per-account P&L on the console is
+# per agent. Set FXC_BROKER_CONSOLE_URL= (empty) to share the seeded accounts instead.
+export FXC_BROKER_CONSOLE_URL="${FXC_BROKER_CONSOLE_URL-http://localhost:8083}"
+
 log "Reports: ${REPORT_DIR}"
 log "Remember: a green 'POST ofx-order' row alone does not mean orders are reaching the exchange —"
 log "watch the '<STRATEGY> accepted' rows. Every OFX failure comes back as HTTP 200."

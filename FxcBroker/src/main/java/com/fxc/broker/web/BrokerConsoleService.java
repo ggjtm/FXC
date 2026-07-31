@@ -66,6 +66,17 @@ public final class BrokerConsoleService {
         return accounts.accounts();
     }
 
+    /**
+     * Open an account for an agent, or return the one it already has (docs/stories/004).
+     *
+     * <p>Unlike everything else here this is a *client* operation rather than an operator one; it
+     * lives on this service because the console's HTTP server is what exposes it, and it is gated
+     * separately from the operator controls.
+     */
+    public AccountService.OpenResult openAccount(String clientId, String ownerName) {
+        return accounts.openAccount(clientId, ownerName);
+    }
+
     public List<PnlService.AccountPnl> pnl() {
         return pnl.series();
     }

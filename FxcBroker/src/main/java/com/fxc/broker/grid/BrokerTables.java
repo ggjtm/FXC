@@ -23,9 +23,15 @@ public final class BrokerTables {
                 CREATE TABLE IF NOT EXISTS ACCOUNT (
                     account_number VARCHAR PRIMARY KEY,
                     owner_name     VARCHAR,
-                    base_ccy       VARCHAR NOT NULL
+                    base_ccy       VARCHAR NOT NULL,
+                    client_id      VARCHAR
                 ) WITH "template=partitioned,backups=0"
                 """);
+
+        // Account opening is idempotent per client id (docs/stories/004): an agent that reconnects —
+        // or a Locust investor respawning into the same slot — gets the account it already had rather
+        // than a second one. Seeded dev accounts leave this null.
+        exec(sql, "CREATE INDEX IF NOT EXISTS ACCOUNT_CLIENT_ID_IDX ON ACCOUNT (client_id)");
 
         // Unified positions: holding_type discriminates CASH vs SHARE (docs/DESIGN.md §3.0).
         exec(sql, """

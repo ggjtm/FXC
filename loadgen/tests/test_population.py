@@ -25,7 +25,9 @@ def _options(**overrides) -> Namespace:
     defaults = dict(
         ofx_user="investor",
         ofx_password="secret",
-        accounts="000123456,000654321",
+        accounts="000000001,000000002",
+        broker_console_url="",
+        client_prefix="locust",
         symbols="ACME",
         strategy="",
         mix_rando=0,
@@ -63,6 +65,7 @@ class PopulationTest(unittest.TestCase):
     def tearDown(self):
         self.locustfile.POPULATION.clear()
         self.locustfile.InvestorUser.host = None
+        self.locustfile._registry = None
 
     def _spawn(self, count: int) -> list:
         users = []
@@ -207,9 +210,53 @@ class PopulationTest(unittest.TestCase):
         self.assertIs(self.locustfile.MARKET, users[0].market)
         self.assertIs(users[0].market, users[2].market)
 
-    def test_accounts_are_spread_round_robin(self):
+    def test_accounts_are_spread_round_robin_when_opening_is_unavailable(self):
+        # Which account the first investor lands on depends on the process-wide spawn counter, so the
+        # property to assert is the alternation, not the starting point.
         users = self._spawn(4)
-        self.assertEqual(["000123456", "000654321"] * 2, [user.account for user in users])
+        assigned = [user.account for user in users]
+        self.assertEqual({"000000001", "000000002"}, set(assigned))
+        for earlier, later in zip(assigned, assigned[1:]):
+            self.assertNotEqual(earlier, later, f"round robin should alternate: {assigned}")
+
+    # --- per-investor accounts (stories/004) ---
+
+    def _with_registry(self, *responses):
+        from fxc_loadgen import accounts
+        from tests.test_accounts import _FakeOpener
+
+        self.locustfile._registry = accounts.AccountRegistry(
+            "http://broker:8083", opener=_FakeOpener(*responses))
+        return self.locustfile._registry
+
+    def test_each_investor_gets_its_own_account(self):
+        self._with_registry({"account": "000100001"}, {"account": "000100002"},
+                            {"account": "000100003"})
+        users = self._spawn(3)
+        self.assertEqual(["000100001", "000100002", "000100003"],
+                         [user.account for user in users])
+        self.assertEqual([0, 1, 2], [user.slot for user in users])
+
+    def test_a_stopped_investor_frees_its_slot_for_the_next_one(self):
+        registry = self._with_registry({"account": "000100001"}, {"account": "000100002"})
+        users = self._spawn(2)
+        users[0].on_stop()
+        self.assertEqual(1, registry.slots_in_use())
+
+        # The replacement takes the freed slot, and with it the same account — this is what keeps a
+        # ramp cycle from opening an account per spawn.
+        (replacement,) = self._spawn(1)
+        self.assertEqual(0, replacement.slot)
+        self.assertEqual("000100001", replacement.account)
+        self.assertEqual(2, len(registry.known_accounts()), "two accounts for three spawns")
+
+    def test_a_broker_that_will_not_open_falls_back_to_the_shared_accounts(self):
+        import urllib.error
+
+        self._with_registry(urllib.error.URLError("refused"), urllib.error.URLError("refused"))
+        users = self._spawn(2)
+        self.assertEqual(["000000001", "000000002"], [user.account for user in users])
+        self.assertEqual([None, None], [user.slot for user in users], "no slot was kept")
 
 
 if __name__ == "__main__":

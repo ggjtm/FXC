@@ -11,6 +11,11 @@
 # CONTINUOUS BY DEFAULT: the agents run until you press Ctrl-C, and Locust drives additional order flow
 # you can steer from a browser. Use --batch for the old bounded walkthrough that exits on its own.
 #
+# IT STARTS COLD. The exchange boots with the market HALTED and the Locust harness boots IDLE, so both
+# starts are yours to make: open the market at http://localhost:8090/ (this script waits for it, then
+# starts the two market-making agents), then press Start at http://localhost:8089/ to add investor
+# load. `--batch` opens the market itself — the unattended path must not need a human.
+#
 # The rigorous, deterministic proof of the same path is the JUnit orchestrator
 # `com.fxc.investor.EndToEndDemoIT` (run via `./gradlew :FxcInvestor:test`); this script is the
 # human-facing walkthrough.
@@ -102,6 +107,19 @@ if command -v sdk >/dev/null 2>&1 && [[ -f .sdkmanrc ]]; then
   set +u; sdk env >/dev/null 2>&1 || true; set -u
 fi
 
+# Without SDKMAN, a shell whose default java is 24/25 fails the Gradle Kotlin-DSL parser with the
+# spectacularly unhelpful "What went wrong: 25.0.3" and takes the whole demo down (README "JDK
+# requirements"). Find a 21 rather than leave the operator to decode that.
+if [[ -z "${JAVA_HOME:-}" ]] || ! "${JAVA_HOME}/bin/java" -version 2>&1 | grep -q '"21'; then
+  if [[ -x /usr/libexec/java_home ]] && /usr/libexec/java_home -v 21 >/dev/null 2>&1; then
+    JAVA_HOME="$(/usr/libexec/java_home -v 21)"
+    export JAVA_HOME
+    log "Using JDK 21 at ${JAVA_HOME} for the Gradle launcher."
+  else
+    warn "JAVA_HOME is not a JDK 21. Gradle's Kotlin DSL fails on 24/25 with 'What went wrong: <version>'."
+  fi
+fi
+
 # --- wait helpers -----------------------------------------------------------
 
 wait_for_port() { # host port name timeout_s
@@ -126,6 +144,58 @@ wait_for_log() { # logfile pattern name timeout_s
   log "${name} is ready."
 }
 
+# Tigase opens 5222 well before it can serve a stream, so waiting on the port is not waiting for the
+# server: FxcPub's Smack client connects into the gap and dies with "Unexpected EOF in prolog", taking
+# the whole demo down. The server says when it is actually ready; wait for that instead.
+wait_for_tigase_ready() { # timeout_s
+  local timeout="${1:-180}" i=0
+  log "Waiting for Tigase to finish starting up..."
+  until docker logs fxc-tigase 2>&1 | grep -q "Server finished starting up"; do
+    i=$((i + 2))
+    [[ ${i} -ge ${timeout} ]] && die "Tigase did not report ready within ${timeout}s (docker logs fxc-tigase)"
+    sleep 2
+  done
+  log "Tigase is ready."
+}
+
+EXCHANGE_HTTP="127.0.0.1:8090"
+LOCUST_HTTP="127.0.0.1:8089"
+
+# The exchange boots HALTED (session.startClosed) so opening the market is something the operator does
+# on purpose. These three are how this script sees and drives that gate.
+market_state() {
+  curl -fsS "http://${EXCHANGE_HTTP}/api/status" 2>/dev/null \
+    | sed -n 's/.*"marketState":"\([A-Z_]*\)".*/\1/p'
+}
+
+open_market() {
+  curl -fsS -X POST "http://${EXCHANGE_HTTP}/api/session/open" >/dev/null 2>&1
+}
+
+wait_for_market_open() { # timeout_s
+  local timeout="${1:-1800}" i=0 state
+  while true; do
+    state="$(market_state)"
+    [[ "${state}" == "OPEN" ]] && { log "Market is OPEN."; return 0; }
+    i=$((i + 2))
+    [[ ${i} -ge ${timeout} ]] && die "market was still ${state:-unreachable} after ${timeout}s"
+    # Short sleeps, not one long one: bash runs a trap only between commands, so a 30-minute sleep
+    # would swallow Ctrl-C for 30 minutes (root PROBLEMS.md P12).
+    (( i % 60 == 0 )) && log "Still waiting for the market to open (${state:-unreachable})..."
+    sleep 2
+  done
+}
+
+start_load_harness() { # brings Locust up IDLE — it autostarts nothing
+  [[ "${WITH_LOAD}" == "true" ]] || return 0
+  # --batch has never run the harness (it exited before this step), and it stays that way: a bounded
+  # smoke test should not pull an image and leave a container behind. Batch proves the Java loop.
+  [[ "${CONTINUOUS}" == "true" ]] || return 0
+  log "Starting the Locust load harness (builds the image on first run)..."
+  docker compose up -d locust || { warn "locust failed to start; continuing without it"; return 0; }
+  wait_for_port 127.0.0.1 8089 "Locust web UI" 120
+}
+
 start_component() { # gradle-task logfile [system-props...]
   local task="$1" logfile="$2"; shift 2
   local gradle_args=()
@@ -147,6 +217,7 @@ log "Bringing up MariaDB + Tigase (docker compose up -d)..."
 docker compose up -d mariadb tigase
 wait_for_port 127.0.0.1 3306 "MariaDB" 90
 wait_for_port 127.0.0.1 5222 "Tigase XMPP" 120
+wait_for_tigase_ready 180
 
 # --- 2. backend components (order matters: exchange, then pub, then broker) --
 
@@ -168,7 +239,39 @@ wait_for_port 127.0.0.1 8083 "FxcBroker console" 60
 
 log "Full stack is up. Backend logs: ${LOG_DIR}/{exchange,pub,broker}.log"
 
-# --- 3. investor workload ---------------------------------------------------
+# --- 3. the market gate -----------------------------------------------------
+#
+# The exchange comes up with the session HALTED. Nothing trades until it is opened, which is the whole
+# point: a demo should start quiet so opening the market is something you can show. The agents are held
+# back rather than left to submit into the halt, because a halted market rejects at the *exchange* and
+# that rejection arrives asynchronously — the OFX reply still says ROUTED, so agents trading into a halt
+# look like a working demo that never fills.
+
+# Bring the (idle) harness up first, so all three consoles are open while the operator reads this.
+# (Continuous only — see start_load_harness.)
+start_load_harness
+
+if [[ "${CONTINUOUS}" == "false" ]]; then
+  # The unattended path must not need a human.
+  log "Opening the market automatically (--batch)..."
+  open_market || die "could not open the market at ${EXCHANGE_HTTP} — is feed.controls.enabled=true?"
+  log "Market is $(market_state)."
+else
+  echo "-----------------------------------------------------------------------"
+  log "The market is $(market_state). Nothing will trade until you open it:"
+  log ""
+  log "  http://localhost:8090/  →  Controls  →  Start trading"
+  log "  or: curl -X POST http://${EXCHANGE_HTTP}/api/session/open"
+  log ""
+  if [[ "${WITH_LOAD}" == "true" ]]; then
+    log "The Locust harness is up and IDLE at http://localhost:8089/ — press Start when you want"
+    log "investor load on top of the two market-making agents."
+    log ""
+  fi
+  wait_for_market_open 1800
+fi
+
+# --- 4. investor workload ---------------------------------------------------
 
 # Two Java agents: these are the architectural participants — Strategy SPI, XMPP feed reading, and the
 # MariaDB decision log. They are not the volume; Locust is.
@@ -189,9 +292,13 @@ fi
 log "Watch for 'BUY/SELL ... -> ROUTED' lines; each agent prices off the live feed + book."
 echo "-----------------------------------------------------------------------"
 
-# Investor B in the background (different account + seed so the two agents cross).
+# The two Java agents ARE the market makers: they trade the internal accounts 1 and 2, which hold the
+# issued float
+# (docs/stories/006), so the inventory investors buy from is actually being quoted. Everyone else — the
+# Locust swarm — opens a cash-only account and has to bid for stock. Pinning `account` skips account
+# opening, which is what `account` was kept for.
 ./gradlew :FxcInvestor:run \
-  -Daccount=000654321 -Dagent.seed=7 -Dagent.strategy="${AGENT_STRATEGY}" \
+  -Daccount=000000001 -Dagent.clientId=investor-b -Dagent.seed=7 -Dagent.strategy="${AGENT_STRATEGY}" \
   -Dagent.ticks="${AGENT_TICKS}" -Dagent.intervalMs=1500 \
   >"${LOG_DIR}/investor-b.log" 2>&1 &
 PIDS+=("$!")
@@ -199,7 +306,7 @@ PIDS+=("$!")
 if [[ "${CONTINUOUS}" == "false" ]]; then
   # Bounded run: A in the foreground so its decisions stream to the terminal, then exit.
   ./gradlew :FxcInvestor:run --console=plain \
-    -Daccount=000123456 -Dagent.seed=42 -Dagent.strategy="${AGENT_STRATEGY}" \
+    -Daccount=000000002 -Dagent.clientId=investor-a -Dagent.seed=42 -Dagent.strategy="${AGENT_STRATEGY}" \
     -Dagent.ticks="${AGENT_TICKS}" -Dagent.intervalMs=1500 \
     2>&1 | sed 's/^/[investor-A] /' || true
 
@@ -213,18 +320,10 @@ fi
 
 # Continuous: background A too, so the script reaches the load harness and then parks.
 ./gradlew :FxcInvestor:run \
-  -Daccount=000123456 -Dagent.seed=42 -Dagent.strategy="${AGENT_STRATEGY}" \
+  -Daccount=000000002 -Dagent.clientId=investor-a -Dagent.seed=42 -Dagent.strategy="${AGENT_STRATEGY}" \
   -Dagent.ticks="${AGENT_TICKS}" -Dagent.intervalMs=1500 \
   >"${LOG_DIR}/investor-a.log" 2>&1 &
 PIDS+=("$!")
-
-# --- 4. Locust load harness -------------------------------------------------
-
-if [[ "${WITH_LOAD}" == "true" ]]; then
-  log "Starting the Locust load harness (builds the image on first run)..."
-  docker compose up -d locust || warn "locust failed to start; continuing without it"
-  wait_for_port 127.0.0.1 8089 "Locust web UI" 120
-fi
 
 # --- 5. park ----------------------------------------------------------------
 
@@ -234,7 +333,8 @@ log ""
 log "  FxcExchange console  http://localhost:8090/   candles + volume, halt/resume, clear book"
 log "  FxcBroker console    http://localhost:8083/   last-sale ticker + per-account P&L, stop/start"
 if [[ "${WITH_LOAD}" == "true" ]]; then
-  log "  Locust load harness  http://localhost:8089/   start/stop and re-rate the workload live"
+  log "  Locust load harness  http://localhost:8089/   IDLE — press Start to add investor load,"
+  log "                                               then re-rate and re-mix it live"
 fi
 log ""
 log "Agent logs: ${LOG_DIR}/investor-{a,b}.log"

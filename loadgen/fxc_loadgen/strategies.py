@@ -133,11 +133,21 @@ def _side_and_quantity(rng: random.Random) -> tuple[str, Decimal]:
 
 @dataclass
 class RandoStrategy:
-    """``rando``: price uniform in ``[last*(1-band), last*(1+band)]``, band 1%.
+    """``rando``: takes the touch when there is one, otherwise a uniform ±band draw around the last sale.
 
-    Faithful port of ``RandoSampler`` + ``SamplingStrategy``. Naive by design — it ignores the
-    portfolio entirely, so it will eventually be rejected for insufficient cash or shares. That is the
-    Java behaviour too, and it is why the demo's sustainable flow comes from the non-naive strategies.
+    Naive by design — it ignores the portfolio entirely, so it will eventually be rejected for
+    insufficient cash or shares. That is the Java behaviour too, and it is why the demo's sustainable
+    flow comes from the non-naive strategies.
+
+    **Divergence from Java's ``RandoSampler``**, which is always the uniform draw: this one crosses the
+    spread when the book offers something to cross (buy the best offer, sell the best bid), so it
+    trades immediately instead of resting. The uniform draw remains the fallback.
+
+    That fallback is load-bearing rather than defensive. This market is long-only, so one side of the
+    book empties routinely — every account able to buy and none able to sell leaves no offers at all —
+    and asking for the best price on an empty side is what ``min()``/``max()`` raise on. A strategy
+    that throws does not "skip a tick": it kills the task, and locust records it as a failure while
+    the investor places nothing at all.
     """
 
     band: float = 0.01
@@ -151,18 +161,26 @@ class RandoStrategy:
             return None  # no last sale yet — Optional.empty() in Java
         factor = Decimal(str(1.0 + (rng.random() * 2.0 - 1.0) * self.band))
         side, quantity = _side_and_quantity(rng)
-        if market.book:
-            if side == "BUY":
-                target_price = min(price for _side, price, _qty in market.book[symbol] if _side == "OFFER")
-            else:
-                target_price = max(price for _side, price, _qty in market.book[symbol] if _side == "BID")
-        else:   
-            target_price = last * factor
+        # Snapped even though a touch price is already on the grid: the fallback draw is not, and an
+        # off-tick price is rejected by the exchange *asynchronously* over FIX — the OFX reply still
+        # says ROUTED, so the order dies somewhere the harness's accepted counter cannot see it
+        # (see instruments.snap_to_tick).
+        target = self._touch(symbol, side, market)
         return OrderIntent(
             side=side,
-            price=target_price,
+            price=instruments.snap_to_tick(symbol, target if target is not None else last * factor),
             quantity=quantity,
         )
+
+    @staticmethod
+    def _touch(symbol: str, side: str, market: MarketView) -> Decimal | None:
+        """Best offer for a buy, best bid for a sell, or ``None`` when that side is empty."""
+        wanted = "OFFER" if side == "BUY" else "BID"
+        prices = [price for level_side, price, _qty in market.book.get(symbol, [])
+                  if level_side == wanted]
+        if not prices:
+            return None
+        return min(prices) if side == "BUY" else max(prices)
 
 
 #: The uniform ±band fallback both histogram strategies share with ``rando``.
