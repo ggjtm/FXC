@@ -4,15 +4,16 @@
     own JDK 17 (fxc.common.jdk17), never jdk21. #}
 {% from 'fxc/tigase/map.jinja' import tigase, jdk17_home with context %}
 {% from 'fxc/map.jinja' import fxc as common with context %}
+{% set roles = salt['grains.get']('roles', salt['pillar.get']('roles', [])) %}
 
 include:
   - fxc.common.installed
   - fxc.common.jdk17
+{% if 'mariadb' in roles %}
+  - fxc.mariadb
+{% endif %}
 
-{#- Cross-role sls requisites only exist when this minion also carries that role (all-in-one):
-    an sls absent from the run is a hard compile error, not an inert ordering hint — see
-    fxc/docs/PROBLEMS.md P13. Split-topology cross-minion ordering is the orchestrate's job (P2). #}
-{% set roles = salt['grains.get']('roles', salt['pillar.get']('roles', [])) %}
+{#- Cross-role mariadb dependency handled by the conditional include above — P13. #}
 fxc-tigase-curl-pkg:
   pkg.installed:
     - name: curl

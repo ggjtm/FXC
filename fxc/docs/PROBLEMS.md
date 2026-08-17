@@ -231,8 +231,12 @@ broker → exchange/pub/mariadb, exchange → mariadb, tigase → mariadb, inves
 its role un-convergeable on any minion not also carrying the referenced role — i.e. the entire
 split topology, and any targeted single-tree `state.apply`.
 
-**Resolution.** Each cross-role requisite is now jinja-guarded by the minion's own `roles`
-grain/pillar: `{% if 'mariadb' in roles %} - sls: fxc.mariadb.running {% endif %}`. All-in-one
-minions keep the full in-run ordering; split minions compile cleanly and rely on
-`fxc/orchestrate/demo_stack.sls` for cross-minion sequencing, which was P2's design intent all
-along. Same-tree requisites (`fxc.<role>.installed` from `fxc.<role>.running`) stay unconditional.
+**Resolution.** Each cross-role dependency is now a jinja-guarded *include + require* pair keyed on
+the minion's own `roles` grain/pillar: when the dependency role is local, `include: fxc.<dep>`
+pulls that tree into the run (so the requisite resolves from ANY entry point — full highstate, the
+orchestrate's single-tree `salt.state` applies, or a manual `state.apply fxc.<role>`); when it
+isn't, both are omitted and cross-minion sequencing falls to `fxc/orchestrate/demo_stack.sls`,
+which was P2's design intent all along. A role-membership guard alone was not enough — the first
+attempt kept the bare requisite on all-in-one minions and still compile-failed every single-tree
+apply, including the orchestrate's own. Same-tree requisites (`fxc.<role>.installed` from
+`fxc.<role>.running`) stay unconditional: the `fxc.<role>` init always includes both.

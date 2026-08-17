@@ -1,8 +1,14 @@
 {% from 'fxc/locust/map.jinja' import locust with context %}
-{#- Cross-role sls requisites only exist when this minion also carries that role (all-in-one):
-    an sls absent from the run is a hard compile error, not an inert ordering hint — see
-    fxc/docs/PROBLEMS.md P13. Split-topology cross-minion ordering is the orchestrate's job (P2). #}
+{#- Cross-role dependencies exist only when this minion also carries that role: an sls
+    requisite whose target is absent from the run is a hard compile error, not an inert ordering
+    hint (fxc/docs/PROBLEMS.md P13). When the role IS local, include its tree so the requisite
+    resolves from any entry point (highstate, orchestrate, single-tree apply); when it isn't,
+    cross-minion ordering is the orchestrate's job (P2). #}
 {% set roles = salt['grains.get']('roles', salt['pillar.get']('roles', [])) %}
+include:
+{% if 'broker' in roles %}
+  - fxc.broker
+{% endif %}
 
 fxc-locust-running:
   service.running:
