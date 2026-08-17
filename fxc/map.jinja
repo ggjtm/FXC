@@ -35,6 +35,16 @@
     },
 }, grain='os_family', merge=salt['pillar.get']('fxc:common', {})) %}
 
+{#- Debian 13 (trixie) dropped openjdk-17 from the archive (only 21/25 ship), so JDK 17 comes from
+    Adoptium's Temurin repo there instead — fxc/docs/PROBLEMS.md P9. A pillar-supplied
+    fxc:common:jdk17_pkg still wins; jdk17_from_adoptium tells jdk17.sls to manage the repo and
+    tigase/map.jinja which JAVA_HOME to point at. #}
+{% if fxc.get('jdk17_pkg') == 'openjdk-17-jdk'
+      and grains['os_family'] == 'Debian'
+      and grains.get('osmajorrelease', 0) | int >= 13 %}
+{% do fxc.update({'jdk17_pkg': 'temurin-17-jdk', 'jdk17_from_adoptium': True}) %}
+{% endif %}
+
 {#- GridGain 8 on JDK 9+ requires this exact --add-opens set (root build.gradle.kts's
     `igniteJvmArgs`, source: .reference/gridgain/README.md §2) for every embedded-GridGain
     component (exchange/broker/pub) launched outside Gradle. Kept as one formula-wide string so a

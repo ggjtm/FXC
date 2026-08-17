@@ -137,3 +137,55 @@ the actual `8.4.1-b12419` dist tarball's `scripts/tigase.sh`.
 confirm the PID file path and that systemd's default `TimeoutStartSec` is generous enough for
 Tigase's actual startup time (which can be tens of seconds — see the `fxc-tigase-ready` retry
 loop's 60×3s budget in `running.sls`, itself a guess pending the same verification).
+
+## P9 — Debian 13 (trixie) has no `openjdk-17-jdk` package — **RESOLVED** (2026-08-17)
+
+**Symptom.** First real all-in-one highstate (fxc-demo-1, Debian 13 arm64, salt-cloud): `fxc-jdk17`
+fails with `E: Unable to locate package openjdk-17-jdk`, cascading through the whole Tigase chain.
+Trixie's archive ships only `openjdk-21-jdk` and `openjdk-25-jdk` — JDK 17 was dropped.
+
+**Impact.** The Tigase role (which is pinned to JDK 17, see P5 and `fxc/common/jdk17.sls`'s header
+comment) cannot converge on any Debian ≥ 13 minion, in both split and all-in-one topologies.
+
+**Resolution.** `fxc/map.jinja` now switches `jdk17_pkg` to `temurin-17-jdk` on Debian ≥ 13 (unless
+pillar overrides `fxc:common:jdk17_pkg`), and `fxc/common/jdk17.sls` manages the Adoptium apt repo
+(`packages.adoptium.net`, per-codename, signed-by keyring) when that switch is active.
+`fxc/tigase/map.jinja`'s `jdk17_home` follows (`/usr/lib/jvm/temurin-17-jdk-<arch>`) — which also
+fixed its previously hardcoded `-amd64` suffix that was wrong on arm64 minions. Residual risk: the
+Adoptium repo is a new external dependency; air-gapped deployments must mirror it or pillar-override
+`jdk17_pkg`.
+
+## P10 — `mysql_*` states unavailable on bootstrap-installed (onedir) minions — **RESOLVED** (2026-08-17)
+
+**Symptom.** Same first highstate: `fxc-mariadb-root-password` fails with `State 'mysql_user.present'
+was not found in SLS 'fxc.mariadb.installed'`, even though `python3-pymysql` installed fine.
+
+**Impact.** Salt-cloud/bootstrap-installed minions run onedir salt with a bundled Python that cannot
+import distro site-packages — the apt `python3-pymysql` satisfies only distro-python salt installs.
+Every `mysql_database`/`mysql_user`/`mysql_grants` state fails, cascading through Tigase schema load
+and all app-role DB dependencies.
+
+**Resolution.** `fxc/mariadb/installed.sls` gained `fxc-mariadb-minion-pymysql`: pip-installs
+`pymysql` into `grains['pythonexecutable']` (the minion's own interpreter) with `reload_modules:
+true`, guarded by an `unless: import pymysql` so it is a no-op where the driver already imports.
+The distro package stays (harmless, still right for distro-python installs).
+
+## P11 — Tigase dist tarball fetch had no `source_hash` and extracted one level too deep — **RESOLVED** (2026-08-17)
+
+**Symptom.** Same first highstate: `fxc-tigase-dist` fails with `Unable to verify upstream hash of
+source file …tigase-server-8.4.1-b12419-dist.tar.gz, please set source_hash…` — Salt refuses remote
+archives without a pinned hash. Fixing that exposed a second, latent bug: the tarball nests
+everything under `tigase-server-8.4.1-b12419/`, while `if_missing`, `fxc-tigase-config`
+(`etc/config.tdsl`), the scripts perms state, and the systemd unit all assume content directly in
+`install_dir` — the state lacked the `--strip-components=1` its reference implementation
+(docker/tigase/Dockerfile line 25) uses.
+
+**Impact.** Tigase could never converge: first hard-fail on the hash, then (had that passed) every
+follow-on state would miss its paths and the un-stripped extract would re-run each highstate
+(`if_missing` never satisfied).
+
+**Resolution.** `fxc/tigase/map.jinja` pins `dist_sha256`
+(`d38e97613eec8b9e9be641b89c5397e60ef4b5db2eb0d83839fb33d803416e5d`, computed from the fetched
+vendor tarball) and `installed.sls` passes `source_hash` plus `options: z --strip-components=1`,
+mirroring the Dockerfile. Pillar can override both url and hash together (`fxc:tigase:download_url`
+/ `dist_sha256`) when pinning a different build.

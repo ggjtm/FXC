@@ -10,6 +10,19 @@ fxc-mariadb-server-pkg:
       - {{ mariadb.pkg_name }}
       - {{ mariadb.python_pkg }}
 
+{#- Bootstrap-installed (onedir) minions bundle their own Python, which cannot import the distro
+    {{ mariadb.python_pkg }} above — and without an importable MySQL driver every mysql_* state
+    below fails as "not found" (fxc/docs/PROBLEMS.md P10). Install PyMySQL into the minion's own
+    interpreter and reload salt's modules; a no-op wherever the driver already imports
+    (distro-python salt installs). #}
+fxc-mariadb-minion-pymysql:
+  cmd.run:
+    - name: {{ grains['pythonexecutable'] }} -m pip install --quiet pymysql
+    - unless: {{ grains['pythonexecutable'] }} -c 'import pymysql'
+    - reload_modules: true
+    - require:
+      - pkg: fxc-mariadb-server-pkg
+
 fxc-mariadb-running-early:
   service.running:
     - name: {{ mariadb.service_name }}
@@ -29,6 +42,7 @@ fxc-mariadb-root-password:
     - connection_unix_socket: /var/run/mysqld/mysqld.sock
     - require:
       - service: fxc-mariadb-running-early
+      - cmd: fxc-mariadb-minion-pymysql
 
 {% for db in mariadb.databases %}
 fxc-mariadb-db-{{ db }}:

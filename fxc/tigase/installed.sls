@@ -22,12 +22,16 @@ fxc-tigase-dirs:
     - require:
       - sls: fxc.common.installed
 
+{#- source_hash is mandatory for remote archives (P11); --strip-components=1 mirrors
+    docker/tigase/Dockerfile — the dist tarball nests everything under
+    tigase-server-<build>/, but every path below assumes content directly in install_dir. #}
 fxc-tigase-dist:
   archive.extracted:
     - name: {{ tigase.install_dir }}
     - source: {{ tigase.download_url }}
+    - source_hash: sha256={{ tigase.dist_sha256 }}
     - archive_format: tar
-    - options: z
+    - options: z --strip-components=1
     - enforce_toplevel: false
     - if_missing: {{ tigase.install_dir }}/scripts/tigase.sh
     - user: {{ common.service_user }}

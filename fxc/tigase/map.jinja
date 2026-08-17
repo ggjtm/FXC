@@ -6,6 +6,7 @@
     'default': {
         'build': '8.4.1-b12419',
         'download_url': 'https://github.com/tigase/tigase-server/releases/download/tigase-server-8.4.1/tigase-server-8.4.1-b12419-dist.tar.gz',
+        'dist_sha256': 'd38e97613eec8b9e9be641b89c5397e60ef4b5db2eb0d83839fb33d803416e5d',
         'install_dir': fxc_root.fxc.base_dir ~ '/tigase',
         'service_name': 'fxctigase',
         'c2s_port': 5222,
@@ -18,8 +19,10 @@
     },
 }, merge=salt['pillar.get']('fxc:tigase', {})) %}
 
-{#- JDK 17 home varies by distro packaging; only this one key needs an os_family split. #}
+{#- JDK 17 home varies by distro packaging — and on Debian by arch and by source: trixie+ gets
+    Temurin from Adoptium (fxc/docs/PROBLEMS.md P9) since openjdk-17 left the archive. #}
 {% set jdk17_home = salt['grains.filter_by']({
-    'Debian': '/usr/lib/jvm/java-17-openjdk-amd64',
+    'Debian': ('/usr/lib/jvm/temurin-17-jdk-' if fxc_root.fxc.get('jdk17_from_adoptium')
+               else '/usr/lib/jvm/java-17-openjdk-') ~ grains['osarch'],
     'RedHat': '/usr/lib/jvm/java-17-openjdk',
 }, grain='os_family', default='Debian') %}
