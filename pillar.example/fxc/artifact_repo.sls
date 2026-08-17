@@ -9,3 +9,7 @@ fxc:
     # docroot: /srv/fxc-artifacts
     # repo_dir: /home/admin/src/FXC.git
     # build_user: admin
+    # The publish build OOM-thrashes on a swapless ~2 GB master (P17), so the role manages a
+    # swapfile. Set build_swap_size to a falsy value ('') to opt out on boxes with real RAM.
+    # build_swap: /swapfile
+    # build_swap_size: 2G

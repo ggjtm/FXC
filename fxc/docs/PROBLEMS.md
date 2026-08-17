@@ -312,3 +312,28 @@ stayed blocked in the all-in-one run order.
 `scripts/demo.sh`'s `wait_for_tigase_ready` uses), guarded by `systemctl is-active` so a stale
 success line from a previous boot can't mask a dead service. Relatedly, P8's `Type=forking` +
 `PIDFile` assumptions are now verified working against the real 8.4.1-b12419 dist.
+
+## P17 — publish build OOM-thrashed a swapless 1.8 GB master past any timeout — **RESOLVED** (2026-08-17)
+
+**Symptom.** The first real `fxc.artifact_repo.publish` run hit `cmd.run`'s 1800s timeout with no
+stderr; after 30 minutes, not one Gradle module had even created its `build/` directory. The
+salt-master (t4g.small: 2 vCPU, 1.8 GB, no swap) had ~790 MB available with salt-master +
+salt-minion + lighttpd resident, and Gradle's wrapper/daemon JVMs plus the Kotlin-DSL build-script
+compiler thrashed against that ceiling indefinitely — no OOM kill, no error, just no progress.
+
+**Root cause.** Memory, not CPU or timeout budget: with a 2 GB swapfile added the identical
+`--no-daemon` build completed in **81 seconds** (peak swap use ~300 MB). `--no-daemon` alone
+(already in `publish-artifacts.sh`) doesn't save you — Gradle still forks a single-use daemon JVM
+to honour JVM settings, plus the Kotlin compiler.
+
+**Impact.** The artifact-repo role — and therefore every artifact-mode `installed.sls` downstream —
+could never converge on the smallest sensible master instance, failing in the most expensive way
+possible (a silent 30-minute hang per attempt).
+
+**Resolution.** `fxc.artifact_repo.installed` now manages a swapfile (`build_swap` /
+`build_swap_size`, default 2G at `/swapfile`, `mount.swap` with `persist: true` so it survives
+reboot; falsy size opts out) and `publish.sls` requires it before building. The publish timeout
+went to 3600s — with swap that budget is for cold-start dependency downloads, not the build.
+`absent.sls` tears the swapfile down. Lesson: a JVM build's failure mode on a memory-starved box
+is not an error you can grep for — it's the absence of progress; check `free` before blaming the
+build.

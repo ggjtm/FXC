@@ -23,6 +23,29 @@ fxc-artifact-repo-docroot:
     - require:
       - sls: fxc.common.installed
 
+{%- if artifact_repo.build_swap_size %}
+{#- The publish build needs memory headroom the typical master doesn't have: on a 2 vCPU / 1.8 GB
+    t4g.small the cold Gradle distTar OOM-thrashed past publish.sls's whole timeout without ever
+    creating a build/ dir, and finished in 81s once swap existed (P17). `unless swaplabel` rather
+    than `creates`: a half-written file from an interrupted fallocate/mkswap must not satisfy the
+    guard, and mkswap on an already-active swapfile would fail with EBUSY anyway.
+    Set fxc:artifact_repo:build_swap_size to a falsy value to opt out. #}
+fxc-artifact-repo-swapfile:
+  cmd.run:
+    - name: >
+        fallocate -l {{ artifact_repo.build_swap_size }} {{ artifact_repo.build_swap }} &&
+        chmod 600 {{ artifact_repo.build_swap }} &&
+        mkswap {{ artifact_repo.build_swap }}
+    - unless: swaplabel {{ artifact_repo.build_swap }}
+
+fxc-artifact-repo-swap:
+  mount.swap:
+    - name: {{ artifact_repo.build_swap }}
+    - persist: true
+    - require:
+      - cmd: fxc-artifact-repo-swapfile
+{%- endif %}
+
 fxc-artifact-repo-dns-script:
   file.managed:
     - name: /usr/local/sbin/fxc-artifact-repo-dns

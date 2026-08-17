@@ -31,3 +31,19 @@ fxc-artifact-repo-docroot-absent:
     - name: {{ artifact_repo.docroot }}
     - require:
       - service: fxc-artifact-repo-disabled
+
+{%- if artifact_repo.build_swap_size %}
+
+fxc-artifact-repo-swap-absent:
+  cmd.run:
+    - name: >
+        swapoff {{ artifact_repo.build_swap }} &&
+        sed -i '\|^{{ artifact_repo.build_swap }}\s|d' /etc/fstab
+    - onlyif: grep -q '^{{ artifact_repo.build_swap }} ' /proc/swaps
+
+fxc-artifact-repo-swapfile-absent:
+  file.absent:
+    - name: {{ artifact_repo.build_swap }}
+    - require:
+      - cmd: fxc-artifact-repo-swap-absent
+{%- endif %}

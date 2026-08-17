@@ -13,6 +13,8 @@
         'docroot': '/srv/fxc-artifacts',
         'repo_dir': '/home/admin/src/FXC.git',
         'build_user': 'admin',
+        'build_swap': '/swapfile',
+        'build_swap_size': '2G',
     },
 }, merge=salt['pillar.get']('fxc:artifact_repo', {})) %}
 
