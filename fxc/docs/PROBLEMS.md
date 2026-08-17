@@ -257,3 +257,21 @@ pillar overrides those defaults, for the worse, in this topology).
 **Resolution.** `topology/all-in-one.sls` now overrides all of those keys back to `localhost`
 URLs/hostnames; pillar top ordering (`fxc.*` first, topology last) makes them win. Split-topology
 `single-role-*.sls` files are unaffected.
+
+## P15 — `load-schema.sh` reported success on a failed schema load — **RESOLVED** (2026-08-17)
+
+**Symptom.** With P14's hostname still broken, `fxc-tigase-schema-loaded` ran `tigase.sh
+upgrade-schema` against an unresolvable DB host — the loader failed, but `tigase.sh` exits 0 and the
+script's only failure check was one narrow phrasing (`Tigase XMPP Server \(Core\).*error`) that
+didn't match, so the script printed "schema load OK", the state succeeded, and the `.schema-loaded`
+marker permanently guarded an empty `tigasedb`. Tigase then crashlooped on `Component server
+(TigaseCustomAuth) schema version is not loaded in the database or it is old!`.
+
+**Impact.** Any transient DB unavailability during first converge silently produces a
+never-retried, permanently broken Tigase. The marker guard (correct in itself) amplifies the
+false positive.
+
+**Resolution.** `load-schema.sh.jinja` now asserts the loader's positive completion markers
+(`Schema upgrade finished` and `Checking connection to database…ok`, both verified against real
+8.4.1-b12419 output) and additionally fails on any `failed|error` in the output — reaching the
+marker `touch` only on a verified load.

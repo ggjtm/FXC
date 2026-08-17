@@ -21,8 +21,18 @@ SVC_PASS="{{ svc_password }}"
 echo "[fxc-tigase] loading/upgrading Tigase schema + provisioning service accounts into MariaDB..."
 OUT="$(bash scripts/tigase.sh upgrade-schema etc/tigase.conf -J "${SVC_ACCOUNTS}" -N "${SVC_PASS}" < /dev/null 2>&1)"
 echo "${OUT}" | tail -30
-if echo "${OUT}" | grep -qiE 'Tigase XMPP Server \(Core\).*error'; then
-  echo "[fxc-tigase] ERROR: core schema failed to load."
+# tigase.sh exits 0 even when the load fails (fxc/docs/PROBLEMS.md P15), so assert the loader's
+# own positive completion markers instead of pattern-matching one failure phrasing.
+if ! echo "${OUT}" | grep -q 'Schema upgrade finished'; then
+  echo "[fxc-tigase] ERROR: schema upgrade did not report finishing."
+  exit 1
+fi
+if ! echo "${OUT}" | grep -qE 'Checking connection to database[[:space:]]+ok'; then
+  echo "[fxc-tigase] ERROR: schema loader could not connect to the database."
+  exit 1
+fi
+if echo "${OUT}" | grep -qiE 'failed|error'; then
+  echo "[fxc-tigase] ERROR: schema loader reported a failure."
   exit 1
 fi
 echo "[fxc-tigase] schema load OK."
