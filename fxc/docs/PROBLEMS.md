@@ -192,3 +192,22 @@ follow-on state would miss its paths and the un-stripped extract would re-run ea
 vendor tarball) and `installed.sls` passes `source_hash` plus `options: z --strip-components=1`,
 mirroring the Dockerfile. Pillar can override both url and hash together (`fxc:tigase:download_url`
 / `dist_sha256`) when pinning a different build.
+
+## P12 — only the root-password state passed MySQL connection credentials — **RESOLVED** (2026-08-17)
+
+**Symptom.** Verifying the P10 fix: `fxc-mariadb-root-password` converges, then every following
+`mysql_database`/`mysql_user`/`mysql_grants` state fails with `MySQL Error 1045: Access denied for
+user 'root'@'localhost' (using password: NO)`.
+
+**Impact.** Only `fxc-mariadb-root-password` carried `connection_*` args; the other six mysql states
+relied on Salt's ambient `mysql.user`/`mysql.pass` config, which nothing (formula or
+`pillar.example`) provides. That works exactly once — on a fresh Debian install root authenticates
+via unix_socket — and breaks the moment the root-password state does its job, since the follow-on
+states then connect passwordless. The `installed.sls` header comment claimed pillar-mapped
+connection keys that never existed. The unix-socket path was also hardcoded to Debian's
+`/var/run/mysqld/mysqld.sock` (wrong on RedHat).
+
+**Resolution.** All seven mysql states now pass the same explicit `connection_user: root` /
+`connection_pass: fxc:mariadb:root_password` / `connection_unix_socket: {{ mariadb.socket }}` args,
+with `socket` added to `fxc/mariadb/map.jinja` per os_family. No ambient minion/pillar mysql config
+is needed anymore.

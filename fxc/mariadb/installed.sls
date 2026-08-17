@@ -39,7 +39,7 @@ fxc-mariadb-root-password:
     - password: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
     - connection_user: root
     - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
-    - connection_unix_socket: /var/run/mysqld/mysqld.sock
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - service: fxc-mariadb-running-early
       - cmd: fxc-mariadb-minion-pymysql
@@ -50,6 +50,9 @@ fxc-mariadb-db-{{ db }}:
     - name: {{ db }}
     - character_set: utf8mb4
     - collate: utf8mb4_unicode_ci
+    - connection_user: root
+    - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - mysql_user: fxc-mariadb-root-password
 {% endfor %}
@@ -59,6 +62,9 @@ fxc-mariadb-app-user:
     - name: {{ mariadb.app_user }}
     - host: '%'
     - password: {{ salt['pillar.get']('fxc:mariadb:app_password') }}
+    - connection_user: root
+    - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - mysql_user: fxc-mariadb-root-password
 
@@ -69,6 +75,9 @@ fxc-mariadb-app-grant-{{ db }}:
     - database: {{ db }}.*
     - user: {{ mariadb.app_user }}
     - host: '%'
+    - connection_user: root
+    - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - mysql_user: fxc-mariadb-app-user
       - mysql_database: fxc-mariadb-db-{{ db }}
@@ -79,6 +88,9 @@ fxc-mariadb-tigase-user:
     - name: {{ mariadb.tigase_user }}
     - host: '%'
     - password: {{ salt['pillar.get']('fxc:mariadb:tigase_password') }}
+    - connection_user: root
+    - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - mysql_user: fxc-mariadb-root-password
 
@@ -88,6 +100,9 @@ fxc-mariadb-tigase-grant:
     - database: tigasedb.*
     - user: {{ mariadb.tigase_user }}
     - host: '%'
+    - connection_user: root
+    - connection_pass: {{ salt['pillar.get']('fxc:mariadb:root_password') }}
+    - connection_unix_socket: {{ mariadb.socket }}
     - require:
       - mysql_user: fxc-mariadb-tigase-user
       - mysql_database: fxc-mariadb-db-tigasedb
