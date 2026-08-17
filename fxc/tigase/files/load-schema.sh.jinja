@@ -22,7 +22,8 @@ echo "[fxc-tigase] loading/upgrading Tigase schema + provisioning service accoun
 OUT="$(bash scripts/tigase.sh upgrade-schema etc/tigase.conf -J "${SVC_ACCOUNTS}" -N "${SVC_PASS}" < /dev/null 2>&1)"
 echo "${OUT}" | tail -30
 # tigase.sh exits 0 even when the load fails (fxc/docs/PROBLEMS.md P15), so assert the loader's
-# own positive completion markers instead of pattern-matching one failure phrasing.
+# own positive completion markers, then scan only its summary's per-step STATUS column — the
+# verbose log above it can contain the words "error"/"failed" benignly.
 if ! echo "${OUT}" | grep -q 'Schema upgrade finished'; then
   echo "[fxc-tigase] ERROR: schema upgrade did not report finishing."
   exit 1
@@ -31,8 +32,16 @@ if ! echo "${OUT}" | grep -qE 'Checking connection to database[[:space:]]+ok'; t
   echo "[fxc-tigase] ERROR: schema loader could not connect to the database."
   exit 1
 fi
-if echo "${OUT}" | grep -qiE 'failed|error'; then
-  echo "[fxc-tigase] ERROR: schema loader reported a failure."
+if echo "${OUT}" | grep -qE '(Checking if database exists|Loading Common Schema Files|Loading schema:)[^	]*[[:space:]](error|failed)[[:space:]]*$'; then
+  echo "[fxc-tigase] ERROR: schema loader reported a failed schema step."
   exit 1
+fi
+# Re-adding accounts that already exist reports "error: Database schema is invalid" (misleading
+# Tigase message) — reachable only in a crash-retry window after a load that already provisioned
+# them, so warn instead of failing the (otherwise verified) load.
+if echo "${OUT}" | grep -qE 'Adding XMPP admin accounts[[:space:]]+(error|failed)'; then
+  echo "[fxc-tigase] WARNING: XMPP admin account provisioning reported an error. This is expected"
+  echo "[fxc-tigase]          when the accounts already exist from a previous load; on a genuine"
+  echo "[fxc-tigase]          first install, verify the service accounts manually."
 fi
 echo "[fxc-tigase] schema load OK."

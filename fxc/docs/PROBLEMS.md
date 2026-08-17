@@ -273,5 +273,9 @@ false positive.
 
 **Resolution.** `load-schema.sh.jinja` now asserts the loader's positive completion markers
 (`Schema upgrade finished` and `Checking connection to database…ok`, both verified against real
-8.4.1-b12419 output) and additionally fails on any `failed|error` in the output — reaching the
-marker `touch` only on a verified load.
+8.4.1-b12419 output) and fails on `error`/`failed` in the summary's per-step status column —
+scoped there because the verbose log above it contains those words benignly (a first, broader
+grep false-failed a fully successful load). One deliberate tolerance: `Adding XMPP admin accounts`
+reporting `error` is downgraded to a loud warning, because re-adding accounts that already exist
+reports the (misleading) `Database schema is invalid` — reachable only in a crash-retry window
+after a load that already provisioned them, and failing there would wedge the state forever.
