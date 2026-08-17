@@ -160,15 +160,18 @@ Adoptium repo is a new external dependency; air-gapped deployments must mirror i
 **Symptom.** Same first highstate: `fxc-mariadb-root-password` fails with `State 'mysql_user.present'
 was not found in SLS 'fxc.mariadb.installed'`, even though `python3-pymysql` installed fine.
 
-**Impact.** Salt-cloud/bootstrap-installed minions run onedir salt with a bundled Python that cannot
-import distro site-packages — the apt `python3-pymysql` satisfies only distro-python salt installs.
-Every `mysql_database`/`mysql_user`/`mysql_grants` state fails, cascading through Tigase schema load
-and all app-role DB dependencies.
+**Impact.** Two independent causes, both hitting salt-cloud/bootstrap-installed minions. (1) Salt
+3008 (Argon) removed the `mysql_*` execution/state modules from core in the Great Module Migration;
+they now live in the `saltext-mysql` PyPI package, which nothing installs. (2) Onedir salt bundles
+its own Python, which cannot import distro site-packages — the apt `python3-pymysql` satisfies only
+distro-python salt installs. Every `mysql_database`/`mysql_user`/`mysql_grants` state fails,
+cascading through Tigase schema load and all app-role DB dependencies.
 
 **Resolution.** `fxc/mariadb/installed.sls` gained `fxc-mariadb-minion-pymysql`: pip-installs
-`pymysql` into `grains['pythonexecutable']` (the minion's own interpreter) with `reload_modules:
-true`, guarded by an `unless: import pymysql` so it is a no-op where the driver already imports.
-The distro package stays (harmless, still right for distro-python installs).
+`pymysql` + `saltext-mysql` into `grains['pythonexecutable']` (the minion's own interpreter) with
+`reload_modules: true`, guarded by an `unless` import check so it is a no-op where both already
+import. The distro package stays (harmless, still right for distro-python pre-3008 installs).
+Salt < 3008 simply finds `saltext-mysql`'s modules shadowing its identical in-tree copies.
 
 ## P11 — Tigase dist tarball fetch had no `source_hash` and extracted one level too deep — **RESOLVED** (2026-08-17)
 
