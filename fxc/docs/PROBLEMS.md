@@ -240,3 +240,20 @@ which was P2's design intent all along. A role-membership guard alone was not en
 attempt kept the bare requisite on all-in-one minions and still compile-failed every single-tree
 apply, including the orchestrate's own. Same-tree requisites (`fxc.<role>.installed` from
 `fxc.<role>.running`) stay unconditional: the `fxc.<role>` init always includes both.
+
+## P14 — all-in-one pillar topology never localized cross-role addresses — **RESOLVED** (2026-08-17)
+
+**Symptom.** With the P9–P13 fixes in place, Tigase converges, starts under systemd… and crashloops
+on `java.net.UnknownHostException: fxc-mariadb-1.internal`: `config.tdsl` was rendered with
+`pillar.example/fxc/mariadb.sls`'s split-topology placeholder hostname.
+
+**Impact.** `topology/all-in-one.sls` only set the `roles` list. Every cross-role address in the
+`fxc/*.sls` pillar files (`fxc:mariadb:host`, broker's `exchange_host`/`pub_host`/`xmpp_host`,
+pub's `xmpp_host`, investor's URLs + `xmpp_host`, locust's three URLs) kept pointing at
+`fxc-<role>-1.internal`, so on an all-in-one box every service would fail name resolution at
+startup even though the formula's own map.jinja defaults are `localhost` (the explicit example
+pillar overrides those defaults, for the worse, in this topology).
+
+**Resolution.** `topology/all-in-one.sls` now overrides all of those keys back to `localhost`
+URLs/hostnames; pillar top ordering (`fxc.*` first, topology last) makes them win. Split-topology
+`single-role-*.sls` files are unaffected.
