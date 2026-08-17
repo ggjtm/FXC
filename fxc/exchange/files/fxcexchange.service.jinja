@@ -1,0 +1,23 @@
+{#- NEEDS VERIFICATION (fxc/docs/PROBLEMS.md / docs/stories): assumes the deployed artifact is a
+    Gradle `application`-plugin distribution (installDist/distTar layout: bin/FxcExchange,
+    lib/*.jar) with a conf/ directory alongside it — Gradle's application plugin does not bundle
+    conf/ by default, so the publish step (docs/PLAN.md Phase 8 item 11) must add it, or this unit
+    must be adjusted once that pipeline exists. #}
+[Unit]
+Description=FxcExchange
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User={{ common.service_user }}
+Group={{ common.service_group }}
+WorkingDirectory={{ exchange.install_dir }}
+Environment=JAVA_HOME={{ jdk21_home }}
+Environment=JAVA_OPTS={{ gridgain_jvm_opts }} -Dgridgain.license.url=file://{{ exchange.install_dir }}/conf/gridgain-license.xml
+ExecStart={{ exchange.install_dir }}/bin/FxcExchange
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

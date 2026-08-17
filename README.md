@@ -222,3 +222,11 @@ Integration tests that need infrastructure **skip** (they don't fail) when it's 
 the archival tests (`*ArchiveIntegrationTest`) need MariaDB on `127.0.0.1:3306`; the XMPP-feed and
 end-to-end tests (`PubIntegrationIT`, `FeedIngestionIT`, `EndToEndDemoIT`) need Tigase on
 `127.0.0.1:5222`. Run `docker compose up -d` first to exercise them.
+
+## SaltStack formula
+
+This repo is *also* a conformant SaltStack formula named `fxc` (state tree in `fxc/`), for
+deploying the same components onto a fleet of AWS EC2 minions via `salt-cloud` — a separate,
+native (JDK + systemd, no Docker) path from the `docker-compose.yml` demo above. See
+[fxc/docs/README.md](fxc/docs/README.md) for usage, [fxc/docs/DESIGN.md](fxc/docs/DESIGN.md) for
+the design, and root [docs/PLAN.md](docs/PLAN.md) Phase 8 for status.

@@ -1,0 +1,69 @@
+{#- Formula-wide defaults: service user/group, base install dir, per-os JDK package names, and
+    the MariaDB connection defaults every component's conf template reads. Each os_family block is
+    self-contained (the saltstack-formulas.org convention) so grains.filter_by's `merge=` only has
+    to layer pillar overrides on top, not reconcile a shared 'default' block. #}
+{% set fxc = salt['grains.filter_by']({
+    'default': {
+        'service_user': 'fxc',
+        'service_group': 'fxc',
+        'base_dir': '/opt/fxc',
+        'jdk17_pkg': 'openjdk-17-jdk',
+        'jdk21_pkg': 'openjdk-21-jdk',
+        'mariadb_host': 'localhost',
+        'mariadb_port': 3306,
+        'mariadb_app_user': 'fxc',
+    },
+    'Debian': {
+        'service_user': 'fxc',
+        'service_group': 'fxc',
+        'base_dir': '/opt/fxc',
+        'jdk17_pkg': 'openjdk-17-jdk',
+        'jdk21_pkg': 'openjdk-21-jdk',
+        'mariadb_host': 'localhost',
+        'mariadb_port': 3306,
+        'mariadb_app_user': 'fxc',
+    },
+    'RedHat': {
+        'service_user': 'fxc',
+        'service_group': 'fxc',
+        'base_dir': '/opt/fxc',
+        'jdk17_pkg': 'java-17-openjdk-devel',
+        'jdk21_pkg': 'java-21-openjdk-devel',
+        'mariadb_host': 'localhost',
+        'mariadb_port': 3306,
+        'mariadb_app_user': 'fxc',
+    },
+}, grain='os_family', merge=salt['pillar.get']('fxc:common', {})) %}
+
+{#- GridGain 8 on JDK 9+ requires this exact --add-opens set (root build.gradle.kts's
+    `igniteJvmArgs`, source: .reference/gridgain/README.md §2) for every embedded-GridGain
+    component (exchange/broker/pub) launched outside Gradle. Kept as one formula-wide string so a
+    change to the Gradle side and the Salt side can be reconciled by diffing this against
+    build.gradle.kts rather than hunting three separate copies. #}
+{% set gridgain_jvm_opts = [
+    "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+    "--add-opens=java.base/jdk.internal.misc=ALL-UNNAMED",
+    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+    "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+    "--add-opens=java.management/com.sun.jmx.mbeanserver=ALL-UNNAMED",
+    "--add-opens=jdk.internal.jvmstat/sun.jvmstat.monitor=ALL-UNNAMED",
+    "--add-opens=java.base/sun.reflect.generics.reflectiveObjects=ALL-UNNAMED",
+    "--add-opens=jdk.management/com.sun.management.internal=ALL-UNNAMED",
+    "--add-opens=java.base/java.io=ALL-UNNAMED",
+    "--add-opens=java.base/java.nio=ALL-UNNAMED",
+    "--add-opens=java.base/java.net=ALL-UNNAMED",
+    "--add-opens=java.base/java.util=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent.locks=ALL-UNNAMED",
+    "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+    "--add-opens=java.base/java.math=ALL-UNNAMED",
+    "--add-opens=java.sql/java.sql=ALL-UNNAMED",
+] | join(' ') %}
+
+{#- JDK 21 home varies by distro packaging (used by exchange/broker/pub/investor systemd units). #}
+{% set jdk21_home = salt['grains.filter_by']({
+    'Debian': '/usr/lib/jvm/java-21-openjdk-amd64',
+    'RedHat': '/usr/lib/jvm/java-21-openjdk',
+}, grain='os_family', default='Debian') %}

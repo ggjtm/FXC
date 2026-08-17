@@ -1,0 +1,32 @@
+{#- Rendered from FxcInvestor/conf/fxcinvestor.conf by fxc.investor.installed. #}
+# In the split AWS topology ofx.broker.url / broker.console.url / xmpp.host resolve to the
+# broker/tigase roles' real hostnames (pillar fxc:investor:* — e.g. via Salt Mine — not localhost).
+ofx.broker.url = {{ investor.ofx_broker_url }}
+ofx.user = {{ ofx_user }}
+ofx.password = {{ ofx_password }}
+ofx.brokerId = {{ investor.ofx_broker_id }}
+
+account = {{ investor.account }}
+account.fallback = {{ investor.account_fallback }}
+agent.clientId = {{ investor.agent_client_id }}
+broker.console.url = {{ investor.broker_console_url }}
+
+xmpp.host = {{ investor.xmpp_host }}
+xmpp.port = {{ investor.xmpp_port }}
+xmpp.domain = {{ investor.xmpp_domain }}
+xmpp.user = investor
+xmpp.password = {{ xmpp_password }}
+
+agent.enabled = {{ investor.agent_enabled | lower }}
+agent.strategy = {{ investor.agent_strategy }}
+agent.symbol = {{ investor.agent_symbol }}
+agent.seedLastSale = {{ investor.agent_seed_last_sale }}
+agent.intervalMs = {{ investor.agent_interval_ms }}
+# 0 = run until interrupted (systemd manages the lifecycle instead of a tick bound).
+agent.ticks = {{ investor.agent_ticks }}
+agent.seed = {{ investor.agent_seed }}
+agent.portfolioRefreshMs = {{ investor.agent_portfolio_refresh_ms }}
+
+db.url = jdbc:mariadb://{{ mariadb_host }}:{{ mariadb_port }}/fxc_investor
+db.user = {{ mariadb_user }}
+db.password = {{ mariadb_password }}

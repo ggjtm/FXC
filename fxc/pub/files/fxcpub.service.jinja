@@ -1,0 +1,18 @@
+[Unit]
+Description=FxcPub
+After=network.target mariadb.service fxctigase.service
+Wants=mariadb.service
+
+[Service]
+Type=simple
+User={{ common.service_user }}
+Group={{ common.service_group }}
+WorkingDirectory={{ pub.install_dir }}
+Environment=JAVA_HOME={{ jdk21_home }}
+Environment=JAVA_OPTS={{ gridgain_jvm_opts }} -Dgridgain.license.url=file://{{ pub.install_dir }}/conf/gridgain-license.xml
+ExecStart={{ pub.install_dir }}/bin/FxcPub
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

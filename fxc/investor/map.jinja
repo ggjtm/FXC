@@ -1,0 +1,30 @@
+{#- One FxcInvestor agent per minion by default (account/clientId/strategy/seed are pillar-driven so
+    several investor-role minions can each run a differently-configured agent — the fleet analog of
+    scripts/demo.sh's two differently-seeded Java agents). No GridGain here — FxcInvestor is a plain
+    MariaDB-backed client/agent (root README's JDK table), so no GridGain JVM opts/license needed. #}
+{% import 'fxc/map.jinja' as fxc_root with context %}
+{% set investor = salt['grains.filter_by']({
+    'default': {
+        'service_name': 'fxcinvestor',
+        'install_dir': fxc_root.fxc.base_dir ~ '/investor',
+        'ofx_broker_url': 'http://localhost:8082/ofx',
+        'ofx_broker_id': 'FXC-BROKER',
+        'broker_console_url': 'http://localhost:8083',
+        'xmpp_host': 'localhost',
+        'xmpp_port': 5222,
+        'xmpp_domain': 'fxc.local',
+        'account': '',
+        'account_fallback': '000000002',
+        'agent_client_id': 'investor-1',
+        'agent_enabled': true,
+        'agent_strategy': 'booker',
+        'agent_symbol': 'ACME',
+        'agent_seed_last_sale': '42.10',
+        'agent_interval_ms': 1500,
+        'agent_ticks': 0,
+        'agent_seed': 7,
+        'agent_portfolio_refresh_ms': 5000,
+        'artifact_url': None,
+        'artifact_sha256': None,
+    },
+}, merge=salt['pillar.get']('fxc:investor', {})) %}

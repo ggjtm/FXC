@@ -1,0 +1,20 @@
+{#- Rendered from FxcExchange/conf/fxcexchange.conf by fxc.exchange.installed. #}
+fix.acceptor.host = {{ exchange.fix_acceptor_host }}
+fix.acceptor.port = {{ exchange.fix_acceptor_port }}
+
+feed.enabled = {{ exchange.feed_enabled | lower }}
+feed.http.port = {{ exchange.feed_http_port }}
+feed.ws.port = {{ exchange.feed_ws_port }}
+
+feed.controls.enabled = {{ exchange.feed_controls_enabled | lower }}
+
+# TRUE means the exchange boots HALTED (root docs/PLAN.md Phase 2 story 002) — opening the market
+# is a deliberate follow-up action (`salt ... fxc_exchange.open`), not part of convergence.
+session.startClosed = {{ exchange.session_start_closed | lower }}
+
+gridgain.instanceName = {{ exchange.gridgain_instance_name }}
+gridgain.persistence.enabled = false
+
+db.url = jdbc:mariadb://{{ mariadb_host }}:{{ mariadb_port }}/fxc_exchange
+db.user = {{ mariadb_user }}
+db.password = {{ mariadb_password }}

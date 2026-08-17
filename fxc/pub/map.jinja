@@ -1,0 +1,15 @@
+{% import 'fxc/map.jinja' as fxc_root with context %}
+{% set pub = salt['grains.filter_by']({
+    'default': {
+        'service_name': 'fxcpub',
+        'install_dir': fxc_root.fxc.base_dir ~ '/pub',
+        'xmpp_host': 'localhost',
+        'xmpp_port': 5222,
+        'xmpp_domain': 'fxc.local',
+        'fix_acceptor_host': '0.0.0.0',
+        'fix_acceptor_port': 9878,
+        'gridgain_instance_name': 'fxc-pub',
+        'artifact_url': None,
+        'artifact_sha256': None,
+    },
+}, merge=salt['pillar.get']('fxc:pub', {})) %}

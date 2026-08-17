@@ -1,0 +1,24 @@
+{#- Rendered from docker/tigase/config.tdsl, parameterized for the native (non-Docker) topology:
+    MariaDB is a separate minion at a real hostname, not the compose network alias `mariadb`, and
+    the service-account password is pillar-driven rather than the shared dev default. Kept as its
+    own template (not a straight salt:// reference to the docker/ copy) so editing the Docker demo
+    path never silently changes the native path or vice versa — see fxc/docs/PROBLEMS.md. #}
+'config-type' = 'default'
+
+'default-virtual-host' = '{{ tigase.virtual_host }}'
+admins = [ '{{ tigase.admin_jid }}' ]
+
+dataSource {
+    default () {
+        uri = 'jdbc:mysql://{{ mariadb_host }}:{{ mariadb_port }}/tigasedb?user={{ tigase_user }}&password={{ tigase_password }}&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC'
+    }
+}
+
+c2s () {}
+ws2s () {}
+bosh () {}
+s2s () {}
+
+pubsub () {}
+muc () {}
+'message-archive' () {}

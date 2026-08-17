@@ -1,0 +1,2 @@
+include:
+  - fxc.common.installed

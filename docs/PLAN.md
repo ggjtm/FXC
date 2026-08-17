@@ -231,8 +231,40 @@ Feature stories layered on the completed components, tracked in each component's
   `RandoStrategyTest`/`HistogramSamplerTest`/`LiquidityAwareStrategyTest` unchanged, and by live
   re-mixing a running demo.
 
+## Phase 8 — SaltStack deployment formula — IN PROGRESS
+
+Turns FXC into a conformant SaltStack formula (`fxc`, state tree at repo root) alongside the
+existing Gradle/Python monorepo, so a fleet of AWS EC2 minions (salt-cloud) converges into a
+running deployment — native JDK21/JDK17 + systemd throughout (no containers), one EC2 instance per
+role by default. Additive to `docker-compose.yml`'s local demo path, which is untouched. See
+[fxc/docs/DESIGN.md](../fxc/docs/DESIGN.md) for the full design and open items,
+[fxc/docs/PLAN.md](../fxc/docs/PLAN.md) for the step-by-step breakdown, and
+[fxc/docs/PROBLEMS.md](../fxc/docs/PROBLEMS.md) for known gaps/risks.
+
+1. [x] `FORMULA` metadata file + root README "SaltStack formula" section.
+2. [x] `fxc/common` (service user/group, base dirs, `jdk17.sls`/`jdk21.sls`) + `fxc/map.jinja`.
+3. [x] `fxc/mariadb`, `fxc/tigase`, `fxc/locust` — native packages/services (not Docker).
+4. [x] `fxc/exchange`, `fxc/pub`, `fxc/broker`, `fxc/investor` — native JDK21 + systemd + pre-built
+   artifact.
+5. [x] `_modules/fxc_exchange.py`, `fxc_broker.py`, `fxc_investor.py`, `fxc_mariadb.py`.
+6. [x] `top.sls` + `pillar.example/` (grain-based `roles` targeting, single-role + all-in-one
+   topologies).
+7. [x] `cloud.providers.d/`, `cloud.profiles.d/`, `cloud.maps.d/` for salt-cloud EC2.
+8. [x] `fxc/orchestrate/demo_stack.sls` + `reset_hard.sls` cross-minion ordering.
+9. [ ] **Build/publish step** producing the pre-built artifacts (Java `distTar` tarballs + a
+   loadgen tarball) that `installed.sls` fetches — does not exist yet; the single largest
+   remaining gap (fxc/docs/PROBLEMS.md P6).
+10. [ ] Verification: local masterless `salt-call --local state.apply` smoke test, `salt-lint`
+    pass, then a real salt-cloud smoke test against the split topology — none run yet.
+- **Exit criteria**: `salt-cloud -m cloud.maps.d/fxc-fleet.map` stands up the 6-instance fleet, a
+  subsequent `salt-run state.orchestrate fxc.orchestrate.demo_stack` converges every minion in
+  dependency order, and `salt -G 'roles:exchange' fxc_exchange.open` + Locust load produces fills
+  observable the same way `scripts/demo.sh` does today.
+
 ## Suggested review checkpoints
 
 Stop-and-review after Phases 1, 2, and 4 — those lock in the FIX usage, the OFX extension
 shape, and the agent loop respectively. Review the gateway design at the start of Phase 7
-(entity mapping and OAuth stub are the risk areas).
+(entity mapping and OAuth stub are the risk areas). Review the fxc formula once Phase 8 item 9
+(the artifact publish step) lands — it's the one piece every native state depends on to actually
+converge for real.

@@ -1,0 +1,10 @@
+name: fxc
+os: RedHat, Ubuntu, Debian, Amazon
+os_family: RedHat, Debian
+min_salt_version: 3006.0
+recommended_salt_version: 3007.0
+root_dir: fxc
+description: >
+  Deploys the FXC simulated financial-market components (FxcExchange, FxcBroker, FxcPub,
+  FxcInvestor) plus their MariaDB and Tigase XMPP infrastructure and the Locust load harness,
+  natively (JDK + systemd, no containers) onto salt-cloud-provisioned AWS EC2 minions.

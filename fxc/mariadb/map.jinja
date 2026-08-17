@@ -1,0 +1,35 @@
+{#- Native MariaDB: package/service names + the four fxc_* schemas + Tigase's tigasedb (replaces
+    docker/mariadb/init/01-databases.sql). Real secrets (app/tigase passwords) come from pillar —
+    see pillar.example/fxc/mariadb.sls; nothing here defaults to a real password. #}
+{% set mariadb = salt['grains.filter_by']({
+    'default': {
+        'pkg_name': 'mariadb-server',
+        'python_pkg': 'python3-pymysql',
+        'service_name': 'mariadb',
+        'port': 3306,
+        'bind_address': '0.0.0.0',
+        'databases': ['fxc_pub', 'fxc_broker', 'fxc_exchange', 'fxc_investor', 'tigasedb'],
+        'app_user': 'fxc',
+        'tigase_user': 'tigase',
+    },
+    'Debian': {
+        'pkg_name': 'mariadb-server',
+        'python_pkg': 'python3-pymysql',
+        'service_name': 'mariadb',
+        'port': 3306,
+        'bind_address': '0.0.0.0',
+        'databases': ['fxc_pub', 'fxc_broker', 'fxc_exchange', 'fxc_investor', 'tigasedb'],
+        'app_user': 'fxc',
+        'tigase_user': 'tigase',
+    },
+    'RedHat': {
+        'pkg_name': 'mariadb-server',
+        'python_pkg': 'python3-PyMySQL',
+        'service_name': 'mariadb',
+        'port': 3306,
+        'bind_address': '0.0.0.0',
+        'databases': ['fxc_pub', 'fxc_broker', 'fxc_exchange', 'fxc_investor', 'tigasedb'],
+        'app_user': 'fxc',
+        'tigase_user': 'tigase',
+    },
+}, grain='os_family', merge=salt['pillar.get']('fxc:mariadb', {})) %}

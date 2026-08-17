@@ -1,0 +1,27 @@
+# Default topology: one EC2 instance per role (6 instances). Bring up with:
+#   salt-cloud -m cloud.maps.d/fxc-fleet.map
+# Tear down with:
+#   salt-cloud -m cloud.maps.d/fxc-fleet.map -d
+fxc-mariadb:
+  - fxc-mariadb-1:
+      profile: fxc-mariadb
+fxc-tigase:
+  - fxc-tigase-1:
+      profile: fxc-tigase
+fxc-exchange:
+  - fxc-exchange-1:
+      profile: fxc-exchange
+fxc-pub:
+  - fxc-pub-1:
+      profile: fxc-pub
+fxc-broker:
+  - fxc-broker-1:
+      profile: fxc-broker
+fxc-investor:
+  - fxc-investor-1:
+      profile: fxc-investor
+
+# Alternative: one demo box instead of the six above —
+# fxc-all-in-one:
+#   - fxc-demo-1:
+#       profile: fxc-all-in-one

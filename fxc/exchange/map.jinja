@@ -1,0 +1,17 @@
+{% import 'fxc/map.jinja' as fxc_root with context %}
+{% set exchange = salt['grains.filter_by']({
+    'default': {
+        'service_name': 'fxcexchange',
+        'install_dir': fxc_root.fxc.base_dir ~ '/exchange',
+        'fix_acceptor_host': '0.0.0.0',
+        'fix_acceptor_port': 9876,
+        'feed_enabled': true,
+        'feed_http_port': 8090,
+        'feed_ws_port': 8091,
+        'feed_controls_enabled': true,
+        'session_start_closed': true,
+        'gridgain_instance_name': 'fxc-exchange',
+        'artifact_url': None,
+        'artifact_sha256': None,
+    },
+}, merge=salt['pillar.get']('fxc:exchange', {})) %}

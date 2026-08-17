@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Rendered by fxc.tigase.installed. Native equivalent of docker/tigase/init-schema.sh: applies the
+# MariaDB signedness fix to Tigase's bundled schema, then loads/upgrades it and provisions FXC's
+# XMPP service accounts. Idempotent by design (see the comment on the "Adding XMPP admin accounts"
+# check below) — the calling state guards re-runs with a marker file regardless.
+set -uo pipefail
+cd "{{ tigase.install_dir }}"
+
+SCHEMA="database/mysql-server-8.0.0-schema.sql"
+
+echo "[fxc-tigase] patching ${SCHEMA}: tig_broadcast_recipients.jid_id -> BIGINT UNSIGNED (MariaDB FK fix)"
+sed -i -E 's/(jid_id[[:space:]]+bigint)([[:space:]]+not[[:space:]]+null[[:space:]]+references[[:space:]]+tig_broadcast_jids)/\1 unsigned\2/I' "${SCHEMA}"
+if ! grep -qiE 'jid_id[[:space:]]+bigint[[:space:]]+unsigned[[:space:]]+not[[:space:]]+null[[:space:]]+references[[:space:]]+tig_broadcast_jids' "${SCHEMA}"; then
+  echo "[fxc-tigase] ERROR: FK patch not applied — Tigase schema layout may have changed."
+  exit 1
+fi
+
+SVC_ACCOUNTS="{{ tigase.service_accounts }}"
+SVC_PASS="{{ svc_password }}"
+
+echo "[fxc-tigase] loading/upgrading Tigase schema + provisioning service accounts into MariaDB..."
+OUT="$(bash scripts/tigase.sh upgrade-schema etc/tigase.conf -J "${SVC_ACCOUNTS}" -N "${SVC_PASS}" < /dev/null 2>&1)"
+echo "${OUT}" | tail -30
+if echo "${OUT}" | grep -qiE 'Tigase XMPP Server \(Core\).*error'; then
+  echo "[fxc-tigase] ERROR: core schema failed to load."
+  exit 1
+fi
+echo "[fxc-tigase] schema load OK."

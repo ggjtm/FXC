@@ -1,0 +1,18 @@
+{#- Rendered from FxcPub/conf/fxcpub.conf by fxc.pub.installed. #}
+# In the split AWS topology xmpp.host resolves to the tigase role's real hostname (pillar
+# fxc:pub:xmpp_host — e.g. via Salt Mine — not localhost). See fxc/docs/DESIGN.md.
+xmpp.host = {{ pub.xmpp_host }}
+xmpp.port = {{ pub.xmpp_port }}
+xmpp.domain = {{ pub.xmpp_domain }}
+xmpp.user = pub-service
+xmpp.password = {{ xmpp_password }}
+
+fix.acceptor.host = {{ pub.fix_acceptor_host }}
+fix.acceptor.port = {{ pub.fix_acceptor_port }}
+
+gridgain.instanceName = {{ pub.gridgain_instance_name }}
+gridgain.persistence.enabled = false
+
+db.url = jdbc:mariadb://{{ mariadb_host }}:{{ mariadb_port }}/fxc_pub
+db.user = {{ mariadb_user }}
+db.password = {{ mariadb_password }}

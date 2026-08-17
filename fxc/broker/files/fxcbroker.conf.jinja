@@ -1,0 +1,54 @@
+{#- Rendered from FxcBroker/conf/fxcbroker.conf by fxc.broker.installed. #}
+ofx.http.host = {{ broker.ofx_http_host }}
+ofx.http.port = {{ broker.ofx_http_port }}
+ofx.user = {{ ofx_user }}
+ofx.password = {{ ofx_password }}
+ofx.brokerId = {{ broker.ofx_broker_id }}
+ofx.http.threads = {{ broker.ofx_http_threads }}
+
+account.issuer = {{ broker.account_issuer }}
+account.issue.shares = {{ broker.account_issue_shares }}
+account.mm.shares = {{ broker.account_mm_shares }}
+
+account.dev = {{ broker.account_dev }}
+account.dev2 = {{ broker.account_dev2 }}
+account.seedCash = {{ broker.account_seed_cash }}
+account.seedSymbol = {{ broker.account_seed_symbol }}
+account.seedSharePrice = {{ broker.account_seed_share_price }}
+
+account.open.enabled = {{ broker.account_open_enabled | lower }}
+account.open.first = {{ broker.account_open_first }}
+account.open.numberWidth = {{ broker.account_open_number_width }}
+account.open.seedCash = {{ broker.account_open_seed_cash }}
+account.open.seedShares = {{ broker.account_open_seed_shares }}
+
+pnl.internalAccountsBelow = {{ broker.pnl_internal_accounts_below }}
+pnl.windowMs = {{ broker.pnl_window_ms }}
+pnl.maxPointsPerAccount = {{ broker.pnl_max_points_per_account }}
+pnl.groupSize = {{ broker.pnl_group_size }}
+pnl.maxRetainedPoints = {{ broker.pnl_max_retained_points }}
+
+web.enabled = {{ broker.web_enabled | lower }}
+web.http.port = {{ broker.web_http_port }}
+web.controls.enabled = {{ broker.web_controls_enabled | lower }}
+
+# In the split AWS topology these resolve to the exchange/pub roles' real hostnames (pillar
+# fxc:broker:exchange_host / pub_host — e.g. via Salt Mine — not localhost). See fxc/docs/DESIGN.md.
+fix.exchange.host = {{ broker.exchange_host }}
+fix.exchange.port = {{ broker.exchange_fix_port }}
+
+fix.pub.host = {{ broker.pub_host }}
+fix.pub.port = {{ broker.pub_fix_port }}
+
+xmpp.host = {{ broker.xmpp_host }}
+xmpp.port = {{ broker.xmpp_port }}
+xmpp.domain = {{ broker.xmpp_domain }}
+xmpp.user = broker
+xmpp.password = {{ xmpp_password }}
+
+gridgain.instanceName = {{ broker.gridgain_instance_name }}
+gridgain.persistence.enabled = false
+
+db.url = jdbc:mariadb://{{ mariadb_host }}:{{ mariadb_port }}/fxc_broker
+db.user = {{ mariadb_user }}
+db.password = {{ mariadb_password }}

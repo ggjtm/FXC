@@ -1,0 +1,30 @@
+{#- Native equivalent of docker-compose.yml's `locust` service: same env-var contract
+    (LOCUST_*/FXC_*), just a systemd unit + venv instead of a container. #}
+{% import 'fxc/map.jinja' as fxc_root with context %}
+{% set locust = salt['grains.filter_by']({
+    'default': {
+        'service_name': 'fxclocust',
+        'install_dir': fxc_root.fxc.base_dir ~ '/locust',
+        'web_port': 8089,
+        'host': 'http://localhost:8082',
+        'users': 8,
+        'spawn_rate': 2,
+        'autostart': false,
+        'accounts': '000000001,000000002',
+        'symbols': 'ACME',
+        'strategy': '',
+        'mix_rando': 0,
+        'mix_booker': 0,
+        'mix_bookfish': 0,
+        'exchange_url': 'http://localhost:8090',
+        'broker_console_url': 'http://localhost:8083',
+        'client_prefix': 'locust',
+        'artifact_url': None,
+        'artifact_sha256': None,
+    },
+}, merge=salt['pillar.get']('fxc:locust', {})) %}
+
+{% set locust_pkgs = salt['grains.filter_by']({
+    'Debian': ['python3', 'python3-venv', 'python3-pip'],
+    'RedHat': ['python3', 'python3-pip'],
+}, grain='os_family', default='Debian') %}

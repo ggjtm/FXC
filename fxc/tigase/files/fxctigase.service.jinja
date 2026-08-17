@@ -1,0 +1,23 @@
+{#- NEEDS EMPIRICAL VERIFICATION (fxc/docs/PROBLEMS.md): Tigase's scripts/tigase.sh daemonizes
+    itself and writes logs/tigase.pid, which maps to systemd Type=forking below — confirm the pid
+    file path and that start/stop are synchronous enough for systemd's default timeouts before
+    relying on this in anything but a dry run. #}
+[Unit]
+Description=FXC Tigase XMPP server (native, JDK 17)
+After=network.target mariadb.service
+Wants=mariadb.service
+
+[Service]
+Type=forking
+User={{ common.service_user }}
+Group={{ common.service_group }}
+WorkingDirectory={{ tigase.install_dir }}
+Environment=JAVA_HOME={{ jdk17_home }}
+PIDFile={{ tigase.install_dir }}/logs/tigase.pid
+ExecStart={{ tigase.install_dir }}/scripts/tigase.sh start
+ExecStop={{ tigase.install_dir }}/scripts/tigase.sh stop
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

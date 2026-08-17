@@ -1,0 +1,28 @@
+[Unit]
+Description=FXC Locust load harness
+After=network.target
+
+[Service]
+Type=simple
+User={{ common.service_user }}
+Group={{ common.service_group }}
+WorkingDirectory={{ locust.install_dir }}
+Environment=LOCUST_HOST={{ locust.host }}
+Environment=LOCUST_USERS={{ locust.users }}
+Environment=LOCUST_SPAWN_RATE={{ locust.spawn_rate }}
+Environment=LOCUST_AUTOSTART={{ locust.autostart | lower }}
+Environment=FXC_ACCOUNTS={{ locust.accounts }}
+Environment=FXC_SYMBOLS={{ locust.symbols }}
+Environment=FXC_STRATEGY={{ locust.strategy }}
+Environment=FXC_MIX_RANDO={{ locust.mix_rando }}
+Environment=FXC_MIX_BOOKER={{ locust.mix_booker }}
+Environment=FXC_MIX_BOOKFISH={{ locust.mix_bookfish }}
+Environment=FXC_EXCHANGE_URL={{ locust.exchange_url }}
+Environment=FXC_BROKER_CONSOLE_URL={{ locust.broker_console_url }}
+Environment=FXC_CLIENT_PREFIX={{ locust.client_prefix }}
+ExecStart={{ locust.install_dir }}/.venv/bin/locust -f {{ locust.install_dir }}/locustfile.py --web-port {{ locust.web_port }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

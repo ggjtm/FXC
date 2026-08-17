@@ -1,0 +1,16 @@
+[Unit]
+Description=FxcInvestor agent
+After=network.target
+
+[Service]
+Type=simple
+User={{ common.service_user }}
+Group={{ common.service_group }}
+WorkingDirectory={{ investor.install_dir }}
+Environment=JAVA_HOME={{ jdk21_home }}
+ExecStart={{ investor.install_dir }}/bin/FxcInvestor
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
