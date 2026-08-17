@@ -130,7 +130,7 @@ Salt's independently-managed `conf/` subdirectory in any way (e.g. a distributio
 { from("conf") { into("conf") } } } }`-style wiring to the relevant `build.gradle.kts`, or confirm
 Salt's independently-managed copy is sufficient as-is.
 
-## P8 — Tigase systemd unit's `Type=forking`/`PIDFile` assumption is unverified — **OPEN** (2026-08-14)
+## P8 — Tigase systemd unit's `Type=forking`/`PIDFile` assumption is unverified — **VERIFIED OK** (2026-08-17)
 
 **Symptom (anticipated).** `fxc/tigase/files/fxctigase.service.jinja` assumes `scripts/tigase.sh
 start` daemonizes and writes `logs/tigase.pid`, matching `Type=forking` + `PIDFile=`. This is a
@@ -141,6 +141,10 @@ the actual `8.4.1-b12419` dist tarball's `scripts/tigase.sh`.
 confirm the PID file path and that systemd's default `TimeoutStartSec` is generous enough for
 Tigase's actual startup time (which can be tens of seconds — see the `fxc-tigase-ready` retry
 loop's 60×3s budget in `running.sls`, itself a guess pending the same verification).
+
+**Verified (2026-08-17).** `Type=forking` + `PIDFile=logs/tigase.pid` work as assumed against the
+real 8.4.1-b12419 dist (systemd tracks the daemonized JVM; startup ~24s on a t4g.2xlarge, well
+inside default timeouts). The readiness probe next to it was broken for a different reason — P16.
 
 ## P9 — Debian 13 (trixie) has no `openjdk-17-jdk` package — **RESOLVED** (2026-08-17)
 
@@ -279,3 +283,20 @@ grep false-failed a fully successful load). One deliberate tolerance: `Adding XM
 reporting `error` is downgraded to a loud warning, because re-adding accounts that already exist
 reports the (misleading) `Database schema is invalid` — reachable only in a crash-retry window
 after a load that already provisioned them, and failing there would wedge the state forever.
+
+## P16 — Tigase readiness probe grepped journald, which the daemonized JVM never writes to — **RESOLVED** (2026-08-17)
+
+**Symptom.** With P9–P15 fixed, Tigase starts and logs `Server finished starting up in (24s)` to
+`logs/tigase-console.log`, all four ports listening — but `fxc-tigase-ready` still exhausts its
+60×3s retry budget: it grepped `journalctl -u fxctigase`, and under `Type=forking` the detached
+JVM's stdout goes to Tigase's own log files, never journald (the journal only carries
+`tigase.sh`'s brief wrapper output).
+
+**Impact.** The tigase role could never report converged, even when fully healthy — and everything
+downstream that requisites `fxc.tigase.running` (pub, and transitively broker/investor/locust)
+stayed blocked in the all-in-one run order.
+
+**Resolution.** The probe now greps `{{ install_dir }}/logs/tigase-console.log` (the same signal
+`scripts/demo.sh`'s `wait_for_tigase_ready` uses), guarded by `systemctl is-active` so a stale
+success line from a previous boot can't mask a dead service. Relatedly, P8's `Type=forking` +
+`PIDFile` assumptions are now verified working against the real 8.4.1-b12419 dist.

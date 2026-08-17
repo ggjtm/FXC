@@ -26,9 +26,13 @@ fxc-tigase-running:
       - file: fxc-tigase-config
       - file: fxc-tigase-unit
 
+{#- The startup message never reaches journald: scripts/tigase.sh daemonizes (Type=forking) and
+    the detached JVM writes to logs/tigase-console.log, so a journalctl grep can never match —
+    fxc/docs/PROBLEMS.md P16. Same log-file grep as scripts/demo.sh's wait_for_tigase_ready,
+    guarded by is-active so a stale success line from a previous boot can't mask a dead service. #}
 fxc-tigase-ready:
   cmd.run:
-    - name: journalctl -u {{ tigase.service_name }} --no-pager | grep -q 'Server finished starting up'
+    - name: systemctl is-active --quiet {{ tigase.service_name }} && grep -q 'Server finished starting up' {{ tigase.install_dir }}/logs/tigase-console.log
     - require:
       - service: fxc-tigase-running
     - retry:
