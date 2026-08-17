@@ -1,0 +1,4 @@
+#!/bin/sh
+# Managed by salt://fxc/artifact_repo/installed.sls (fxc/docs/PROBLEMS.md P6).
+# certbot.timer renews unattended; lighttpd holds the old cert in memory until reloaded.
+systemctl reload lighttpd

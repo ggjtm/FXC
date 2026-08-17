@@ -16,6 +16,7 @@ base:
     - fxc.broker
     - fxc.investor
     - fxc.locust
+    - fxc.artifact_repo
 
   'fxc-demo-*':
     - topology.all-in-one

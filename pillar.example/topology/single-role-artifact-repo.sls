@@ -1,0 +1,2 @@
+roles:
+  - artifact-repo

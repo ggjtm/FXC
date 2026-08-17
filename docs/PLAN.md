@@ -251,9 +251,9 @@ role by default. Additive to `docker-compose.yml`'s local demo path, which is un
    topologies).
 7. [x] `cloud.providers.d/`, `cloud.profiles.d/`, `cloud.maps.d/` for salt-cloud EC2.
 8. [x] `fxc/orchestrate/demo_stack.sls` + `reset_hard.sls` cross-minion ordering.
-9. [ ] **Build/publish step** producing the pre-built artifacts (Java `distTar` tarballs + a
-   loadgen tarball) that `installed.sls` fetches — does not exist yet; the single largest
-   remaining gap (fxc/docs/PROBLEMS.md P6).
+9. [x] **Build/publish step** producing the pre-built artifacts (Java `distTar` tarballs + a
+   loadgen tarball) that `installed.sls` fetches — done via `scripts/publish-artifacts.sh` + the
+   `fxc.artifact_repo` role (fxc/docs/PROBLEMS.md P6, resolved 2026-08-17).
 10. [ ] Verification: local masterless `salt-call --local state.apply` smoke test, `salt-lint`
     pass, then a real salt-cloud smoke test against the split topology — none run yet.
 - **Exit criteria**: `salt-cloud -m cloud.maps.d/fxc-fleet.map` stands up the 6-instance fleet, a

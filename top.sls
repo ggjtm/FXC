@@ -44,3 +44,9 @@ base:
   'roles:locust':
     - match: grain
     - fxc.locust
+
+  # The salt-master itself, enrolled as a hand-provisioned minion (static /etc/salt/grains) —
+  # serves the component artifact tarballs over HTTPS (fxc/docs/PROBLEMS.md P6).
+  'roles:artifact-repo':
+    - match: grain
+    - fxc.artifact_repo

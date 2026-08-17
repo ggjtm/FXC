@@ -94,7 +94,7 @@ defaults, but this has not been verified.
 and no verification stage currently targets it specifically). Tracked here so it isn't forgotten
 when someone does pick that topology.
 
-## P6 — the artifact publish pipeline doesn't exist yet — **OPEN** (2026-08-14)
+## P6 — the artifact publish pipeline doesn't exist yet — **RESOLVED** (2026-08-17)
 
 **Symptom.** Every `installed.sls` reads `fxc:<component>:artifact_url`/`artifact_sha256` from
 pillar and expects a fetchable pre-built distribution tarball there. No step in this repo currently
@@ -105,8 +105,20 @@ exist at all).
 **Impact.** Artifact-mode `installed.sls` states cannot converge for real until this exists —
 verification stage 3 (masterless real converge) is blocked on it.
 
-**Resolution.** Not started. Tracked as `docs/PLAN.md` Phase 8 item 11 (root) / this file's PLAN.md
-item 11.
+**Resolution.** `scripts/publish-artifacts.sh` + the new `fxc.artifact_repo` role. The salt-master
+itself is enrolled as a minion (static `/etc/salt/grains` → `roles: [artifact-repo]`) and serves
+`/srv/fxc-artifacts` via lighttpd (mod_openssl) at `https://artifacts.mariagrid.ddzone.io/` — a
+Route53-hosted name because Let's Encrypt refuses `*.compute.amazonaws.com` by policy; the cert is
+certbot dns-01 (`python3-certbot-dns-route53`, instance-role creds), renewed by `certbot.timer` +
+a lighttpd-reload deploy hook. The publish script runs Gradle `distTar` for the four Java
+components and repacks the output FLAT (the component `archive.extracted` states expect `bin/` +
+`lib/` at archive top — no `--strip-components`, contrast P11), tars `loadgen/`'s contents
+(pyproject at top, for locust's `pip install -e`), and writes `<name>.tar` + `.sha256` sidecars
+under stable names, so the pillar `artifact_url`/`artifact_sha256` values (now filled in
+`pillar.example`) never change per build. `top.sls`'s `'*'` → `fxc.common.installed` applying to
+the master-minion is fine — it creates only the fxc user and `/opt/fxc`, no JDK. P7's
+conf/-layout question is now testable (P7 stays OPEN until verified). The GridGain license is
+deliberately NOT hosted in the (world-readable) docroot.
 
 ## P7 — Gradle `application`-plugin distributions may not bundle `conf/` — **OPEN** (2026-08-14)
 

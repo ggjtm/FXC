@@ -1,0 +1,34 @@
+# Managed by salt://fxc/artifact_repo/installed.sls — do not edit by hand.
+# Serves the FXC artifact repository (fxc/docs/PROBLEMS.md P6): plain static files + directory
+# listing from {{ docroot }}, TLS on :443 from the certbot-managed Let's Encrypt cert, and an
+# unconditional http->https redirect. lighttpd reads the cert as root before dropping privileges,
+# so /etc/letsencrypt needs no permission changes.
+
+server.modules = (
+    "mod_access",
+    "mod_redirect",
+    "mod_dirlisting",
+    "mod_openssl",
+)
+
+server.document-root = "{{ docroot }}"
+server.port          = 80
+server.username      = "www-data"
+server.groupname     = "www-data"
+server.errorlog      = "/var/log/lighttpd/error.log"
+server.pid-file      = "/run/lighttpd.pid"
+
+include_shell "/usr/share/lighttpd/create-mime.conf.pl"
+
+# Artifact browsing; dotfiles (e.g. .published-git-rev) are hidden by default.
+dir-listing.activate = "enable"
+
+$SERVER["socket"] == ":443" {
+    ssl.engine  = "enable"
+    ssl.pemfile = "/etc/letsencrypt/live/{{ hostname }}/fullchain.pem"
+    ssl.privkey = "/etc/letsencrypt/live/{{ hostname }}/privkey.pem"
+}
+
+$HTTP["scheme"] == "http" {
+    url.redirect = ( "" => "https://{{ hostname }}${url.path}${qsa}" )
+}

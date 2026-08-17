@@ -28,11 +28,12 @@ the step-by-step breakdown for that phase specifically.
    split topology default, all-in-one alternative).
 10. [x] `fxc/orchestrate/demo_stack.sls` (cross-minion convergence order) + `reset_hard.sls`
     (fleet-wide `scripts/reset.sh --hard` equivalent).
-11. [ ] **Build/publish step** producing the pre-built artifacts (Java `distTar` tarballs +
+11. [x] **Build/publish step** producing the pre-built artifacts (Java `distTar` tarballs +
     Gradle-side `conf/` bundling if not already included in the `application` plugin's
-    distribution layout, plus a `loadgen/` tarball) that every `installed.sls` fetches. Does not
-    exist yet — artifact-mode installs cannot be exercised end to end until it does. This is the
-    single largest remaining gap.
+    distribution layout, plus a `loadgen/` tarball) that every `installed.sls` fetches. Done via
+    `scripts/publish-artifacts.sh` + the `fxc.artifact_repo` role (lighttpd + certbot on the
+    salt-master) — see PROBLEMS.md P6's Resolution. `conf/` bundling deliberately not added:
+    Salt manages `conf/` itself (P7, still to verify against a real artifact).
 12. [ ] Verification (see below) — none of the live-infrastructure stages have been run yet; this
     plan and the state files it describes are unexercised beyond template/syntax review.
 - **Exit criteria**: `salt-cloud -m cloud.maps.d/fxc-fleet.map` stands up the 6-instance fleet, a

@@ -1,0 +1,23 @@
+{#- The artifact repository role (fxc/docs/PROBLEMS.md P6): the salt-master itself, enrolled as a
+    minion, serves the pre-built component tarballs from a lighttpd docroot over HTTPS. The TLS
+    hostname lives in the operator's Route53 zone because Let's Encrypt refuses to issue for
+    *.compute.amazonaws.com (forbidden by policy) — so certbot validates via dns-01 against
+    Route53 using the instance role's credentials, and no public :80 is required for issuance. #}
+{% import 'fxc/map.jinja' as fxc_root with context %}
+{% set artifact_repo = salt['grains.filter_by']({
+    'default': {
+        'hostname': 'artifacts.mariagrid.ddzone.io',
+        'zone_name': 'mariagrid.ddzone.io',
+        'route53_zone_id': None,
+        'acme_email': None,
+        'docroot': '/srv/fxc-artifacts',
+        'repo_dir': '/home/admin/src/FXC.git',
+        'build_user': 'admin',
+    },
+}, merge=salt['pillar.get']('fxc:artifact_repo', {})) %}
+
+{#- mod_openssl ships inside Debian's core lighttpd package (only the non-OpenSSL TLS backends are
+    split out as lighttpd-mod-* packages), so no extra TLS module package exists to install. #}
+{% set artifact_repo_pkgs = salt['grains.filter_by']({
+    'Debian': ['lighttpd', 'certbot', 'python3-certbot-dns-route53'],
+}, grain='os_family', default='Debian') %}

@@ -9,3 +9,4 @@ include:
   - fxc.broker
   - fxc.investor
   - fxc.locust
+  - fxc.artifact_repo

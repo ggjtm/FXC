@@ -104,10 +104,10 @@ plaintext `conf/*.conf`/`docker-compose.yml` literals into pillar. `pillar.examp
 | pub | 9878 (FIX drop-copy) | broker SG |
 | broker | 8082 (OFX), 8083 (console) | investor/locust SG + operator IP |
 | investor / locust | 8089 (Locust UI, investor role only) | operator IP |
+| artifact-repo (salt-master) | 443 (HTTPS), 80 (redirect only) | world-OK: public, non-secret artifacts (the GridGain license is deliberately NOT hosted here); at minimum every role SG + operator IP |
 
 ## Deferred / out of scope for this pass
 
-- The build/publish pipeline producing the pre-built artifacts (`docs/PLAN.md` item 11).
 - Salt Mine-based automatic hostname resolution across roles (currently static pillar values).
 - kitchen-salt or equivalent automated formula testing (see `docs/PLAN.md`'s verification section).
 - Running more than one FxcInvestor agent per minion (currently one `fxcinvestor.service` per

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Managed by salt://fxc/artifact_repo/installed.sls — do not edit by hand.
+#
+# Keeps the artifact repository's A record ({{ hostname }}) pointed at this instance's current
+# public IP. Salt 3008 onedir carries no route53 modules (the Great Module Migration, cf.
+# fxc/docs/PROBLEMS.md P10), so this is a plain aws-CLI script driven by cmd.run: `check` exits 0
+# when the record already matches (the state's `unless`), `apply` UPSERTs it. Credentials come
+# from the instance role; the public IP comes from IMDSv2 at runtime, never hardcoded.
+set -euo pipefail
+
+FQDN="{{ hostname }}."
+ZONE_NAME="{{ zone_name }}."
+ZONE_ID="{{ route53_zone_id }}"
+
+TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+         -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"
+PUBLIC_IP="$(curl -sf -H "X-aws-ec2-metadata-token: ${TOKEN}" \
+             http://169.254.169.254/latest/meta-data/public-ipv4)"
+
+if [ -z "${ZONE_ID}" ]; then
+  ZONE_ID="$(aws route53 list-hosted-zones-by-name --dns-name "${ZONE_NAME}" --max-items 1 \
+             --query 'HostedZones[0].Id' --output text)"
+  ZONE_ID="${ZONE_ID#/hostedzone/}"
+fi
+if [ -z "${ZONE_ID}" ] || [ "${ZONE_ID}" = "None" ]; then
+  echo "[fxc-artifact-repo-dns] ERROR: no hosted zone found for ${ZONE_NAME}" >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  check)
+    CURRENT="$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+               --query "ResourceRecordSets[?Name=='${FQDN}' && Type=='A'].ResourceRecords[0].Value" \
+               --output text)"
+    [ "${CURRENT}" = "${PUBLIC_IP}" ]
+    ;;
+  apply)
+    aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" --change-batch "{
+      \"Changes\": [{
+        \"Action\": \"UPSERT\",
+        \"ResourceRecordSet\": {
+          \"Name\": \"${FQDN}\",
+          \"Type\": \"A\",
+          \"TTL\": 300,
+          \"ResourceRecords\": [{\"Value\": \"${PUBLIC_IP}\"}]
+        }
+      }]
+    }" --output text > /dev/null
+    echo "[fxc-artifact-repo-dns] ${FQDN%.} -> ${PUBLIC_IP}"
+    ;;
+  *)
+    echo "usage: $0 check|apply" >&2
+    exit 2
+    ;;
+esac
