@@ -40,6 +40,10 @@ all-in-one topology (one state run, one minion) work without orchestration at al
 verified one. First real salt-cloud smoke test (PLAN.md item 12/verification stage 4) is where this
 gets proven.
 
+**Verified (2026-08-17) — half wrong.** The all-in-one claim held, but "the plain `require:`
+requisites remain correct" did not: on any minion whose run doesn't include the referenced sls, the
+requisite is a hard compile error, not an inert hint — see P13 for the fix.
+
 ## P3 — "started" is not "actually ready" — **MITIGATED (by design), not eliminated** (2026-08-14)
 
 **Symptom (anticipated).** `service.running` succeeding only means systemd accepted the start
@@ -214,3 +218,21 @@ connection keys that never existed. The unix-socket path was also hardcoded to D
 `connection_pass: fxc:mariadb:root_password` / `connection_unix_socket: {{ mariadb.socket }}` args,
 with `socket` added to `fxc/mariadb/map.jinja` per os_family. No ambient minion/pillar mysql config
 is needed anymore.
+
+## P13 — cross-role `require: sls:` requisites break compilation on split-topology minions — **RESOLVED** (2026-08-17)
+
+**Symptom.** `state.apply fxc.tigase` on the all-in-one test minion (and, by construction, any
+highstate on a split-topology tigase/pub/broker/exchange/investor/locust minion): `Data failed to
+compile: Referenced state does not exist for requisite [require: (sls: fxc.mariadb.running)]`.
+
+**Impact.** P2 assumed an unresolvable `sls:` requisite is merely inert cross-minion; it is actually
+a compile failure. Every `running.sls` carrying a cross-role requisite (pub → tigase/mariadb,
+broker → exchange/pub/mariadb, exchange → mariadb, tigase → mariadb, investor/locust → broker) made
+its role un-convergeable on any minion not also carrying the referenced role — i.e. the entire
+split topology, and any targeted single-tree `state.apply`.
+
+**Resolution.** Each cross-role requisite is now jinja-guarded by the minion's own `roles`
+grain/pillar: `{% if 'mariadb' in roles %} - sls: fxc.mariadb.running {% endif %}`. All-in-one
+minions keep the full in-run ordering; split minions compile cleanly and rely on
+`fxc/orchestrate/demo_stack.sls` for cross-minion sequencing, which was P2's design intent all
+along. Same-tree requisites (`fxc.<role>.installed` from `fxc.<role>.running`) stay unconditional.

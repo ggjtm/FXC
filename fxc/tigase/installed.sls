@@ -9,6 +9,10 @@ include:
   - fxc.common.installed
   - fxc.common.jdk17
 
+{#- Cross-role sls requisites only exist when this minion also carries that role (all-in-one):
+    an sls absent from the run is a hard compile error, not an inert ordering hint — see
+    fxc/docs/PROBLEMS.md P13. Split-topology cross-minion ordering is the orchestrate's job (P2). #}
+{% set roles = salt['grains.get']('roles', salt['pillar.get']('roles', [])) %}
 fxc-tigase-curl-pkg:
   pkg.installed:
     - name: curl
@@ -101,7 +105,9 @@ fxc-tigase-schema-loaded:
     - require:
       - file: fxc-tigase-load-schema-script
       - file: fxc-tigase-dist-ownership
+{% if 'mariadb' in roles %}
       - sls: fxc.mariadb.running
+{% endif %}
 
 fxc-tigase-unit:
   file.managed:
