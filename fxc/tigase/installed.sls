@@ -39,6 +39,20 @@ fxc-tigase-dist:
       - file: fxc-tigase-dirs
       - pkg: fxc-tigase-curl-pkg
 
+{#- archive.extracted does not enforce user/group recursively when `options` is set (the tar runs
+    as root and its output stays root-owned) — P11. load-schema.sh sed-patches files inside
+    database/ as {{ common.service_user }}, so the whole tree must actually belong to it. #}
+fxc-tigase-dist-ownership:
+  file.directory:
+    - name: {{ tigase.install_dir }}
+    - user: {{ common.service_user }}
+    - group: {{ common.service_group }}
+    - recurse:
+      - user
+      - group
+    - require:
+      - archive: fxc-tigase-dist
+
 fxc-tigase-scripts-executable:
   file.directory:
     - name: {{ tigase.install_dir }}/scripts
@@ -86,6 +100,7 @@ fxc-tigase-schema-loaded:
     - unless: test -f {{ tigase.install_dir }}/.schema-loaded
     - require:
       - file: fxc-tigase-load-schema-script
+      - file: fxc-tigase-dist-ownership
       - sls: fxc.mariadb.running
 
 fxc-tigase-unit:

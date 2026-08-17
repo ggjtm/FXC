@@ -191,7 +191,10 @@ follow-on state would miss its paths and the un-stripped extract would re-run ea
 (`d38e97613eec8b9e9be641b89c5397e60ef4b5db2eb0d83839fb33d803416e5d`, computed from the fetched
 vendor tarball) and `installed.sls` passes `source_hash` plus `options: z --strip-components=1`,
 mirroring the Dockerfile. Pillar can override both url and hash together (`fxc:tigase:download_url`
-/ `dist_sha256`) when pinning a different build.
+/ `dist_sha256`) when pinning a different build. One more layer of the same onion: with `options`
+set, `archive.extracted` does not apply `user:` recursively (the tar output stays root-owned), which
+broke `load-schema.sh`'s in-place sed as the service user — a `fxc-tigase-dist-ownership`
+`file.directory` recurse state now chowns the tree after extraction.
 
 ## P12 — only the root-password state passed MySQL connection credentials — **RESOLVED** (2026-08-17)
 
