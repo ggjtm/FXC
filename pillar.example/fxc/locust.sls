@@ -9,3 +9,8 @@ fxc:
     host: http://fxc-broker-1.internal:8082
     exchange_url: http://fxc-exchange-1.internal:8090
     broker_console_url: http://fxc-broker-1.internal:8083
+    # OFX signon creds default to fxc:broker:ofx_user/ofx_password (they MUST match the broker,
+    # and a mismatch is an invisible SONRS 15500, not an HTTP error — fxc/docs/PROBLEMS.md P22).
+    # Only set these if the locust minion's pillar deliberately diverges from the broker's:
+    # ofx_user: investor
+    # ofx_password: CHANGEME

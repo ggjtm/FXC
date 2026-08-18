@@ -430,3 +430,28 @@ pillar dict is never masked, and this stays portable to pre-3008 minions (unlike
 new `unmask=True` kwarg). Lesson: when a value that "cannot possibly be wrong" (a hardcoded
 default!) misbehaves, print the exact string the code received — ten asterisks look like display
 masking right up until `len()` says the data itself is the mask.
+
+## P22 — locust's unit env omitted the OFX credentials, so every swarm request signon-failed — **RESOLVED** (2026-08-18)
+
+**Symptom.** First real investor-tier run: market OPEN, all services healthy, locust swarming —
+and 100% of `ofx-order`/`ofx-statement` requests fail with `signon rejected (SONRS/STATUS/
+CODE=15500)`. Zero trades reach the exchange.
+
+**Root cause.** `fxclocust.service.jinja` mirrored docker-compose's locust env contract — which
+never passes `FXC_OFX_USER`/`FXC_OFX_PASSWORD` because the compose stack's broker and loadgen
+both happen to use the dev defaults (`investor`/`secret`). The formula's broker reads
+`ofx.password` from pillar (`fxc:broker:ofx_password`), so the moment that pillar value differs
+from `secret` — which is the entire point of making it pillar-driven — locust's built-in default
+can no longer sign on, and there was no env var in the unit to tell it otherwise.
+
+**Impact.** The locust investor tier (PLAN's exit-criteria load harness) could not produce a
+single fill against any non-dev broker credential set.
+
+**Resolution.** `fxc/locust/map.jinja` gains `ofx_user`/`ofx_password`, DEFAULTED to the broker's
+own pillar keys (`fxc:broker:ofx_*`) — pillar top.sls applies every component's pillar file to
+every minion precisely so cross-component contracts can be read like this; an explicit
+`fxc:locust:ofx_*` override still wins. The unit template exports both as env vars. Lesson: when
+a formula mirrors a compose file's env contract, mirror the CONTRACT (every knob the consumer
+reads), not the subset the compose file happened to set — anything the compose stack agreed on
+implicitly via shared defaults becomes an invisible coupling the moment one side goes
+pillar-driven.

@@ -20,6 +20,8 @@ Environment=FXC_MIX_BOOKFISH={{ locust.mix_bookfish }}
 Environment=FXC_EXCHANGE_URL={{ locust.exchange_url }}
 Environment=FXC_BROKER_CONSOLE_URL={{ locust.broker_console_url }}
 Environment=FXC_CLIENT_PREFIX={{ locust.client_prefix }}
+Environment=FXC_OFX_USER={{ locust.ofx_user }}
+Environment=FXC_OFX_PASSWORD={{ locust.ofx_password }}
 ExecStart={{ locust.install_dir }}/.venv/bin/locust -f {{ locust.install_dir }}/locustfile.py --web-port {{ locust.web_port }}
 Restart=on-failure
 RestartSec=5
