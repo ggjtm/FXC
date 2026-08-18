@@ -1,5 +1,11 @@
 {#- Native equivalent of docker-compose.yml's `locust` service: same env-var contract
-    (LOCUST_*/FXC_*), just a systemd unit + venv instead of a container. #}
+    (LOCUST_*/FXC_*), just a systemd unit + venv instead of a container.
+
+    ofx_user/ofx_password must match FxcBroker's ofx.user/ofx.password (a mismatch is an
+    invisible SONRS 15500, not an HTTP error — loadgen/README.md, P22). They default to the
+    BROKER's pillar keys — pillar top.sls applies every component's pillar file to every minion
+    precisely so cross-component contracts like this can be read; an explicit fxc:locust:ofx_*
+    still wins via merge. #}
 {% import 'fxc/map.jinja' as fxc_root with context %}
 {% set locust = salt['grains.filter_by']({
     'default': {
@@ -19,11 +25,6 @@
         'exchange_url': 'http://localhost:8090',
         'broker_console_url': 'http://localhost:8083',
         'client_prefix': 'locust',
-        {#- OFX signon creds must match FxcBroker's ofx.user/ofx.password (a mismatch is an
-            invisible SONRS 15500, not an HTTP error — loadgen/README.md). Default to the
-            BROKER's pillar keys — pillar top.sls applies every component's pillar file to every
-            minion precisely so cross-component contracts like this can be read; an explicit
-            fxc:locust:ofx_* still wins via merge. P22. #}
         'ofx_user': salt['pillar.get']('fxc:broker:ofx_user', 'investor'),
         'ofx_password': salt['pillar.get']('fxc:broker:ofx_password', 'secret'),
         'artifact_url': None,
