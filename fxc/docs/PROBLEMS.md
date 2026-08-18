@@ -62,7 +62,7 @@ done now.
 market is a separate action (`fxc_exchange.open`), not something any `running.sls` should do
 automatically.
 
-## P4 — Tigase's config-rewrite-on-startup vs. Salt's `file.managed` — **OPEN** (2026-08-14)
+## P4 — Tigase's config-rewrite-on-startup vs. Salt's `file.managed` — **RESOLVED** (2026-08-18)
 
 **Symptom (anticipated).** `docker/tigase/Dockerfile`'s comment states Tigase "rewrites/backs up its
 config on startup," which is why the Docker path bakes `config.tdsl` into the image at build time
@@ -76,10 +76,19 @@ normalizing), Salt clobbering it back to the canonical template on every highsta
 desired config-as-code behavior. If the rewrite carries meaningful runtime state (e.g. anything
 beyond what `upgrade-schema` already persists to MariaDB), repeated highstates could lose it.
 
-**Resolution.** Not yet determined — needs an empirical test: start Tigase natively, diff
-`config.tdsl` before/after its first startup, and decide whether `file.managed`'s reassertion is
-safe or whether the state needs a "manage once, then hands off" pattern (e.g. `unless: test -f
-{path}` on the initial `file.managed` only, forgoing drift correction after first boot).
+**Resolution.** Empirically settled on the live all-in-one converge (2026-08-18): the rewrite is
+purely cosmetic — Tigase alphabetizes the keys, reflows blank lines, and materializes default
+`seeOtherHost {}` beans; no values or runtime state are added — so clobbering loses nothing. But
+the converse cost was real: `file.managed` diffed on EVERY converge and its `watch` bounced a
+healthy XMPP server each highstate. Neither of P4's original two options fits ("reassert+restart
+forever" churns; "manage once, hands off" forgoes config-as-code), so the state now does both:
+the template renders to `etc/config.tdsl.salt` (stable — only pillar/template edits change it),
+and a `cmd.run` copies it over the live `config.tdsl` only when the render differs from the
+`.config.tdsl.applied` snapshot of what was last pushed (or the live file is missing). Tigase may
+reformat the live file freely; pillar changes still land and restart the service via the watch on
+the copy. Lesson: "does the daemon rewrite its own config?" is not a yes/no gate but a
+three-sided contract between the daemon, the config manager, and the restart trigger — the
+trigger must key on what YOU changed, never on what the daemon touched.
 
 ## P5 — JDK 17/21 coexistence risk under the all-in-one topology — **OPEN** (2026-08-14)
 

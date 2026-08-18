@@ -23,7 +23,7 @@ fxc-tigase-running:
       - sls: fxc.mariadb.running
 {% endif %}
     - watch:
-      - file: fxc-tigase-config
+      - cmd: fxc-tigase-config
       - file: fxc-tigase-unit
 
 {#- The startup message never reaches journald: scripts/tigase.sh daemonizes (Type=forking) and

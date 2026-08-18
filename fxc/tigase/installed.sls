@@ -67,9 +67,16 @@ fxc-tigase-scripts-executable:
     - require:
       - archive: fxc-tigase-dist
 
-fxc-tigase-config:
+{#- Tigase rewrites config.tdsl on startup (P4, now verified: alphabetized keys, materialized
+    seeOtherHost {} defaults — cosmetically different, same content). Managing config.tdsl
+    directly therefore diffs on EVERY converge, and a watch on it bounces a healthy XMPP server
+    each highstate. So: render the template to a .salt side file (stable — only pillar/template
+    edits change it) and copy it over the live file only onchanges of the render. Tigase's own
+    reformatting of the live file never triggers anything; config-as-code changes still land and
+    restart via running.sls's watch on the copy. #}
+fxc-tigase-config-render:
   file.managed:
-    - name: {{ tigase.install_dir }}/etc/config.tdsl
+    - name: {{ tigase.install_dir }}/etc/config.tdsl.salt
     - source: salt://fxc/tigase/files/config.tdsl.jinja
     - template: jinja
     - user: {{ common.service_user }}
@@ -81,6 +88,22 @@ fxc-tigase-config:
         tigase_password: {{ salt['pillar.get']('fxc:mariadb:tigase_password') | tojson }}
     - require:
       - archive: fxc-tigase-dist
+
+{#- .config.tdsl.applied snapshots what was last pushed live. Copy (and thus restart, via
+    running.sls's watch) only when the fresh render differs from that snapshot or the live file
+    is missing — NOT when the live file differs from the render, because it always will once
+    Tigase reformats it. #}
+fxc-tigase-config:
+  cmd.run:
+    - name: >
+        install -o {{ common.service_user }} -m 0644
+        {{ tigase.install_dir }}/etc/config.tdsl.salt {{ tigase.install_dir }}/etc/config.tdsl &&
+        cp -p {{ tigase.install_dir }}/etc/config.tdsl.salt {{ tigase.install_dir }}/etc/.config.tdsl.applied
+    - unless: >
+        test -f {{ tigase.install_dir }}/etc/config.tdsl &&
+        cmp -s {{ tigase.install_dir }}/etc/config.tdsl.salt {{ tigase.install_dir }}/etc/.config.tdsl.applied
+    - require:
+      - file: fxc-tigase-config-render
 
 fxc-tigase-load-schema-script:
   file.managed:
