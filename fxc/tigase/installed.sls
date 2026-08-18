@@ -80,6 +80,7 @@ fxc-tigase-config-render:
     - source: salt://fxc/tigase/files/config.tdsl.jinja
     - template: jinja
     - user: {{ common.service_user }}
+    - group: {{ common.service_group }}
     - context:
         tigase: {{ tigase | tojson }}
         mariadb_host: {{ salt['pillar.get']('fxc:mariadb:host', salt['pillar.get']('fxc:common:mariadb_host', 'localhost')) | tojson }}
@@ -96,7 +97,7 @@ fxc-tigase-config-render:
 fxc-tigase-config:
   cmd.run:
     - name: >
-        install -o {{ common.service_user }} -m 0644
+        install -o {{ common.service_user }} -g {{ common.service_group }} -m 0644
         {{ tigase.install_dir }}/etc/config.tdsl.salt {{ tigase.install_dir }}/etc/config.tdsl &&
         cp -p {{ tigase.install_dir }}/etc/config.tdsl.salt {{ tigase.install_dir }}/etc/.config.tdsl.applied
     - unless: >
