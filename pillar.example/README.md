@@ -17,9 +17,11 @@ Example pillar tree for the `fxc` formula. **None of the values here are real se
    assign pillar `roles` via this directory's `top.sls` matching the minion ID *and* change root
    `top.sls`'s `match: grain` to `match: pillar` for every entry (the two approaches are not meant
    to be mixed in one tree — see root `top.sls`'s own comment).
-4. Set `fxc:gridgain:license_source` to a real `salt://`, `s3://`, or `https://` URL for a signed
-   GridGain 8 Ultimate XML license (v2.1) — never commit the license file itself (see root
-   README.md's "GridGain license" section).
+4. Supply a signed GridGain 8 Ultimate XML license (v2.1) — never commit the license file itself
+   (see root README.md's "GridGain license" section). Either set `fxc:gridgain:license_source` to
+   a real `salt://`, `s3://`, or `https://` URL, or keep the XML inline in a private pillar sls
+   (e.g. `gridgain:v8:license: |`) and set `fxc:gridgain:license_pillar` to that key's dotted
+   path (`gridgain:v8:license`) — `license_pillar` wins when both are set.
 
 See `fxc/docs/DESIGN.md` for the full secrets-handling design and `fxc/docs/PROBLEMS.md` for known
 gaps (e.g. cross-minion hostname resolution for `fix.exchange.host` etc. in the split topology).

@@ -46,10 +46,17 @@ fxc-exchange-conf:
     - require:
       - archive: fxc-exchange-artifact
 
+{#- Two ways to supply the license: fxc:gridgain:license_pillar names a pillar key holding the
+    XML inline (wins when set — nothing to host, the secret rides the encrypted pillar channel),
+    else fxc:gridgain:license_source is a salt://, s3://, or https:// URL to the file. #}
 fxc-exchange-gridgain-license:
   file.managed:
     - name: {{ exchange.install_dir }}/conf/gridgain-license.xml
+{%- if salt['pillar.get']('fxc:gridgain:license_pillar') %}
+    - contents_pillar: {{ salt['pillar.get']('fxc:gridgain:license_pillar') }}
+{%- else %}
     - source: {{ salt['pillar.get']('fxc:gridgain:license_source') }}
+{%- endif %}
     - user: {{ common.service_user }}
     - mode: '0600'
     - require:

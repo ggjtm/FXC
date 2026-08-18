@@ -46,10 +46,16 @@ fxc-broker-conf:
     - require:
       - archive: fxc-broker-artifact
 
+{#- license_pillar (inline XML via pillar) wins over license_source (URL) — fxc/exchange/installed.sls
+    has the full rationale. #}
 fxc-broker-gridgain-license:
   file.managed:
     - name: {{ broker.install_dir }}/conf/gridgain-license.xml
+{%- if salt['pillar.get']('fxc:gridgain:license_pillar') %}
+    - contents_pillar: {{ salt['pillar.get']('fxc:gridgain:license_pillar') }}
+{%- else %}
     - source: {{ salt['pillar.get']('fxc:gridgain:license_source') }}
+{%- endif %}
     - user: {{ common.service_user }}
     - mode: '0600'
     - require:

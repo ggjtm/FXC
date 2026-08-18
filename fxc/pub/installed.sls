@@ -44,10 +44,16 @@ fxc-pub-conf:
     - require:
       - archive: fxc-pub-artifact
 
+{#- license_pillar (inline XML via pillar) wins over license_source (URL) — fxc/exchange/installed.sls
+    has the full rationale. #}
 fxc-pub-gridgain-license:
   file.managed:
     - name: {{ pub.install_dir }}/conf/gridgain-license.xml
+{%- if salt['pillar.get']('fxc:gridgain:license_pillar') %}
+    - contents_pillar: {{ salt['pillar.get']('fxc:gridgain:license_pillar') }}
+{%- else %}
     - source: {{ salt['pillar.get']('fxc:gridgain:license_source') }}
+{%- endif %}
     - user: {{ common.service_user }}
     - mode: '0600'
     - require:
