@@ -24,10 +24,11 @@ fxc-exchange-running:
       - file: fxc-exchange-unit
 
 {#- "started" is not "actually ready" (fxc/docs/PROBLEMS.md) — matches scripts/demo.sh's
-    wait_for_log "FxcExchange started" + port waits. #}
+    wait_for_log "FxcExchange started" + port waits. is-active guard per P16/P20: journald keeps
+    old lines, and Type=simple "active" says nothing — a crash-looping service must not pass. #}
 fxc-exchange-ready:
   cmd.run:
-    - name: journalctl -u {{ exchange.service_name }} --no-pager | grep -q 'FxcExchange started'
+    - name: systemctl is-active --quiet {{ exchange.service_name }} && journalctl -u {{ exchange.service_name }} --no-pager | grep -q 'FxcExchange started'
     - require:
       - service: fxc-exchange-running
     - retry:

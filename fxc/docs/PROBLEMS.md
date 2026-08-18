@@ -371,3 +371,29 @@ targets.
 `creates: .venv/bin/pip` (python3-venv was already in locust_pkgs); `pip.installed` keeps working
 against the venv via `bin_env`. Same doctrine as the artifact-repo role's aws-CLI choice: when the
 Salt module layer is the moving part (3008 onedir), pin the mechanism to the OS's own tools.
+
+## P20 — unquoted systemd Environment= silently dropped every JVM opt after the first — **RESOLVED** (2026-08-18)
+
+**Symptom.** With P18 fixed, fxcexchange died on
+`Failed to load license: file:///opt/fxc/exchange/gridgain-license.xml` — the path WITHOUT
+`conf/`, i.e. GridNode.licenseUrl()'s working-directory fallback, despite the unit setting
+`-Dgridgain.license.url=file://.../conf/gridgain-license.xml`. fxcpub crash-looped identically —
+yet converged green (see below).
+
+**Root cause.** `Environment=JAVA_OPTS={{ gridgain_jvm_opts }} -D...` is parsed by systemd as a
+space-separated LIST of assignments, not one value: only the first `--add-opens=...` token became
+JAVA_OPTS; the remaining 18 add-opens and the license -D were each "Invalid environment
+assignment, ignoring:" (the journal says so plainly). The whole value needs quotes:
+`Environment="JAVA_OPTS=... ... ..."`.
+
+**Compounding gap.** Pub had no ready probe, so `service.running` (Type=simple: start returns
+before the first crash) reported success and the converge stayed green while fxcpub restart-looped
+— the failure only surfaced as broker/investor/locust requisite errors pointing at exchange.
+Exchange/broker's probes also grepped journald unguarded, so a "started" line surviving from any
+earlier boot would have masked a current crash-loop (P16's exact lesson, unapplied here).
+
+**Resolution.** Quoted the `Environment="JAVA_OPTS=..."` line in all three GridGain unit templates;
+added the missing fxc-pub-ready probe; prefixed all three probes with
+`systemctl is-active --quiet <svc> &&` per P16. Lesson: grep the minion's journal for "Invalid
+environment assignment" after any unit-template change — systemd tells you exactly what it threw
+away, but only if you look.

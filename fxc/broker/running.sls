@@ -35,9 +35,10 @@ fxc-broker-running:
       - file: fxc-broker-conf
       - file: fxc-broker-unit
 
+{#- is-active guard per P16/P20 — a stale journald line from a crash-looping service must not pass. #}
 fxc-broker-ready:
   cmd.run:
-    - name: journalctl -u {{ broker.service_name }} --no-pager | grep -q 'FxcBroker started'
+    - name: systemctl is-active --quiet {{ broker.service_name }} && journalctl -u {{ broker.service_name }} --no-pager | grep -q 'FxcBroker started'
     - require:
       - service: fxc-broker-running
     - retry:

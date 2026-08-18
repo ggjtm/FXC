@@ -28,3 +28,16 @@ fxc-pub-running:
     - watch:
       - file: fxc-pub-conf
       - file: fxc-pub-unit
+
+{#- Pub had NO ready probe, and that gap is exactly how P20 hid: Type=simple start "succeeds"
+    before the first crash, so a crash-looping pub converged green and broker/investor/locust
+    only failed later on their own requisites. Same probe pattern as exchange/broker (Main.java
+    prints "FxcPub started" to stdout → journald), is-active-guarded per P16. #}
+fxc-pub-ready:
+  cmd.run:
+    - name: systemctl is-active --quiet {{ pub.service_name }} && journalctl -u {{ pub.service_name }} --no-pager | grep -q 'FxcPub started'
+    - require:
+      - service: fxc-pub-running
+    - retry:
+        attempts: 60
+        interval: 3

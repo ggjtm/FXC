@@ -9,7 +9,7 @@ User={{ common.service_user }}
 Group={{ common.service_group }}
 WorkingDirectory={{ broker.install_dir }}
 Environment=JAVA_HOME={{ jdk21_home }}
-Environment=JAVA_OPTS={{ gridgain_jvm_opts }} -Dgridgain.license.url=file://{{ broker.install_dir }}/conf/gridgain-license.xml
+Environment="JAVA_OPTS={{ gridgain_jvm_opts }} -Dgridgain.license.url=file://{{ broker.install_dir }}/conf/gridgain-license.xml"
 ExecStart={{ broker.install_dir }}/bin/FxcBroker
 Restart=on-failure
 RestartSec=5
