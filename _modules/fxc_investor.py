@@ -14,6 +14,8 @@ minions, which is exactly what orchestration runners are for.
 """
 import os
 
+import salt.utils.data
+
 __virtualname__ = "fxc_investor"
 
 _DROPIN_DIR = "/etc/systemd/system/fxcinvestor.service.d"
@@ -56,8 +58,13 @@ def reset_hard():
     """
     removed = []
     for name in ("exchange", "broker", "pub"):
-        work_dir = __salt__["pillar.get"](
-            "fxc:{0}:gridgain_work_dir".format(name), "/tmp/fxc-{0}-ignite".format(name)
+        # __pillar__ direct read — Salt 3008's pillar_mask_output masks __salt__['pillar.get']
+        # strings outside state rendering (fxc/docs/PROBLEMS.md P21).
+        work_dir = salt.utils.data.traverse_dict_and_list(
+            __pillar__,
+            "fxc:{0}:gridgain_work_dir".format(name),
+            "/tmp/fxc-{0}-ignite".format(name),
+            delimiter=":",
         )
         if os.path.isdir(work_dir):
             __salt__["file.remove"](work_dir)

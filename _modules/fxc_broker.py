@@ -5,6 +5,7 @@ is deliberately NOT wrapped here — it is a client/demo operation, not fleet ma
 
 See fxc_exchange.py's module docstring for why this is `fxc_broker` and not `fxc.broker`.
 """
+import salt.utils.data
 import salt.utils.http as http
 
 __virtualname__ = "fxc_broker"
@@ -14,9 +15,15 @@ def __virtual__():
     return __virtualname__
 
 
+def _pillar_get(key, default=None):
+    """__pillar__ direct read — Salt 3008's pillar_mask_output masks __salt__['pillar.get']
+    strings outside state rendering (fxc/docs/PROBLEMS.md P21, full rationale in fxc_exchange.py)."""
+    return salt.utils.data.traverse_dict_and_list(__pillar__, key, default, delimiter=":")
+
+
 def _base_url():
-    port = __salt__["pillar.get"]("fxc:broker:web_http_port", 8083)
-    host = __salt__["pillar.get"]("fxc:broker:local_host", "127.0.0.1")
+    port = _pillar_get("fxc:broker:web_http_port", 8083)
+    host = _pillar_get("fxc:broker:local_host", "127.0.0.1")
     return "http://{0}:{1}".format(host, port)
 
 

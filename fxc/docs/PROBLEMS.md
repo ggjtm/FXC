@@ -406,3 +406,27 @@ added the missing fxc-pub-ready probe; prefixed all three probes with
 `systemctl is-active --quiet <svc> &&` per P16. Lesson: grep the minion's journal for "Invalid
 environment assignment" after any unit-template change — systemd tells you exactly what it threw
 away, but only if you look.
+
+## P21 — Salt 3008 masks pillar.get returns, breaking every fxc_* execution module — **RESOLVED** (2026-08-18)
+
+**Symptom.** `salt 'fxc-demo-1' fxc_exchange.status` (and open/close, and fxc_broker.*) returned
+`[Errno -2] Name or service not known` on a fully converged, locally-curl-able stack. Debug logs
+showed the request going to `http://**********:8090/api/status` — ten literal asterisks.
+
+**Root cause.** Salt 3008 ships `pillar_mask_output: True` by default: `pillar.get`/`pillar.items`
+return `**********` in place of every STRING value — including the caller-supplied default for a
+missing key — except inside state rendering (a context flag exempts it, which is why all 87 states
+converge with real values while the same call in an execution module gets the mask). Ints pass
+through unmasked, which made the failure maximally confusing: `feed_http_port` came back 8090,
+`local_host` came back as asterisks, and the module built a URL around a mask.
+
+**Impact.** Every operator action the formula exposes through `_modules/` (market open/close,
+broker trading gate, investor reset) was unusable via the salt CLI, i.e. the exit-criteria step
+`salt -G 'roles:exchange' fxc_exchange.open` itself.
+
+**Resolution.** The modules now read `__pillar__` directly via
+`salt.utils.data.traverse_dict_and_list(..., delimiter=":")` (a `_pillar_get` helper) — the raw
+pillar dict is never masked, and this stays portable to pre-3008 minions (unlike passing 3008's
+new `unmask=True` kwarg). Lesson: when a value that "cannot possibly be wrong" (a hardcoded
+default!) misbehaves, print the exact string the code received — ten asterisks look like display
+masking right up until `len()` says the data itself is the mask.

@@ -9,6 +9,7 @@ Named `fxc_exchange` rather than `fxc.exchange` because Salt execution modules d
 state tree's dotted directory namespacing — a module's callable name is fixed by its filename/
 __virtualname__. This is a forced, documented deviation (fxc/docs/DESIGN.md), not an oversight.
 """
+import salt.utils.data
 import salt.utils.http as http
 
 __virtualname__ = "fxc_exchange"
@@ -18,9 +19,19 @@ def __virtual__():
     return __virtualname__
 
 
+def _pillar_get(key, default=None):
+    """
+    Read pillar via __pillar__ directly, NOT __salt__['pillar.get']: Salt 3008's
+    pillar_mask_output (default True) makes pillar.get return '**********' for every
+    string — defaults included — outside state rendering, which turned _base_url()'s
+    host into a masked literal and every call into a DNS error (fxc/docs/PROBLEMS.md P21).
+    """
+    return salt.utils.data.traverse_dict_and_list(__pillar__, key, default, delimiter=":")
+
+
 def _base_url():
-    port = __salt__["pillar.get"]("fxc:exchange:feed_http_port", 8090)
-    host = __salt__["pillar.get"]("fxc:exchange:local_host", "127.0.0.1")
+    port = _pillar_get("fxc:exchange:feed_http_port", 8090)
+    host = _pillar_get("fxc:exchange:local_host", "127.0.0.1")
     return "http://{0}:{1}".format(host, port)
 
 
