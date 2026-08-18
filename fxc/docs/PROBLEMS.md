@@ -337,3 +337,37 @@ went to 3600s — with swap that budget is for cold-start dependency downloads, 
 `absent.sls` tears the swapfile down. Lesson: a JVM build's failure mode on a memory-starved box
 is not an error you can grep for — it's the absence of progress; check `free` before blaming the
 build.
+
+## P18 — jdk21_home hardcoded the amd64 path, crash-looping every JDK21 service on arm64 — **RESOLVED** (2026-08-18)
+
+**Symptom.** First all-in-one converge with real artifacts + license: `fxcexchange` and `fxcpub`
+enabled but dead, systemd restart-looping on `ERROR: JAVA_HOME is set to an invalid directory:
+/usr/lib/jvm/java-21-openjdk-amd64` (broker/investor/locust blocked downstream as requisite
+failures). The minion is arm64; the JDK actually installed at `/usr/lib/jvm/java-21-openjdk-arm64`.
+
+**Root cause.** `fxc/map.jinja`'s `jdk21_home` hardcoded the `-amd64` suffix. P9's fix gave
+`jdk17_home` (tigase/map.jinja) the `grains['osarch']` suffix treatment; `jdk21_home` was written
+earlier and never revisited.
+
+**Resolution.** `'/usr/lib/jvm/java-21-openjdk-' ~ grains['osarch']` on Debian, exactly like
+jdk17_home. One fix covers exchange, pub, broker, and investor — all four units template
+`JAVA_HOME={{ jdk21_home }}`. Lesson: a launcher script's JAVA_HOME validation turns a path typo
+into a clean, greppable journald error — but only the FIRST failing service's journal shows it;
+the rest drown as requisite noise.
+
+## P19 — Salt 3008's virtualenv state can't create a venv on a minimal Debian 13 — **RESOLVED** (2026-08-18)
+
+**Symptom.** `fxc-locust-venv` (`virtualenv.managed` with `python: /usr/bin/python3`) raised
+`CommandExecutionError: The 'python'('--python') option is not supported by 'venv'`, killing the
+whole locust chain.
+
+**Root cause.** The `virtualenv` CLI isn't installed (and isn't a locust_pkgs dependency), so
+Salt's virtualenv module silently falls back to stdlib `python -m venv` — which it refuses to pass
+`--python` to. The `python:` option was there precisely to keep the venv off the onedir minion's
+private interpreter (P10's lesson), making the state self-defeating on exactly the boxes it
+targets.
+
+**Resolution.** Replaced with an explicit `cmd.run: /usr/bin/python3 -m venv ...` guarded by
+`creates: .venv/bin/pip` (python3-venv was already in locust_pkgs); `pip.installed` keeps working
+against the venv via `bin_env`. Same doctrine as the artifact-repo role's aws-CLI choice: when the
+Salt module layer is the moving part (3008 onedir), pin the mechanism to the OS's own tools.

@@ -31,20 +31,25 @@ fxc-locust-artifact:
       - file: fxc-locust-dirs
       - pkg: fxc-locust-pkgs
 
+{#- Not virtualenv.managed: Salt 3008's virtualenv module wants the `virtualenv` CLI (absent from
+    a minimal trixie) and its stdlib-venv fallback rejects the state's `python` option outright
+    with a CommandExecutionError (P19). `python3 -m venv` (python3-venv, installed above) does
+    exactly what's needed — a venv on the SYSTEM python, never the onedir minion's private one. #}
 fxc-locust-venv:
-  virtualenv.managed:
-    - name: {{ locust.install_dir }}/.venv
-    - python: /usr/bin/python3
-    - user: {{ common.service_user }}
+  cmd.run:
+    - name: /usr/bin/python3 -m venv {{ locust.install_dir }}/.venv
+    - runas: {{ common.service_user }}
+    - creates: {{ locust.install_dir }}/.venv/bin/pip
     - require:
       - archive: fxc-locust-artifact
+      - pkg: fxc-locust-pkgs
 
 fxc-locust-pip-install:
   pip.installed:
     - name: locust==2.32.5
     - bin_env: {{ locust.install_dir }}/.venv
     - require:
-      - virtualenv: fxc-locust-venv
+      - cmd: fxc-locust-venv
 
 fxc-locust-pip-install-loadgen:
   cmd.run:

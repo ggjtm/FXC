@@ -72,8 +72,10 @@
     "--add-opens=java.sql/java.sql=ALL-UNNAMED",
 ] | join(' ') %}
 
-{#- JDK 21 home varies by distro packaging (used by exchange/broker/pub/investor systemd units). #}
+{#- JDK 21 home varies by distro packaging (used by exchange/broker/pub/investor systemd units).
+    Debian suffixes the CPU arch, so derive it from grains — a hardcoded -amd64 crash-looped every
+    JDK21 service on arm64 (P18; jdk17_home in tigase/map.jinja got the same fix under P9). #}
 {% set jdk21_home = salt['grains.filter_by']({
-    'Debian': '/usr/lib/jvm/java-21-openjdk-amd64',
+    'Debian': '/usr/lib/jvm/java-21-openjdk-' ~ grains['osarch'],
     'RedHat': '/usr/lib/jvm/java-21-openjdk',
 }, grain='os_family', default='Debian') %}
