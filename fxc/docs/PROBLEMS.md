@@ -524,3 +524,39 @@ on the 8 GB root fs, which was already at 99%.
 rename and the build's byproducts stay off root. Lesson: "atomic rename" is a property of a
 filesystem boundary, not of the `mv` command — and a comment asserting atomicity is worth checking
 against `df` the moment the docroot moves.
+
+## P26 — ABBA deadlock between AccountService and PnlService wedged the whole broker — **RESOLVED** (2026-08-19)
+
+**Symptom.** Ramping the Locust swarm from 32 to 512 investors wedged the broker completely within
+seconds: the console stopped answering, every OFX request hung (locust showed 512 users and
+*0* requests, because in-flight requests never complete), and the broker's FIX session to the
+exchange died with `Timed out waiting for logon response` every 11 seconds forever. The host was
+idle throughout — load 0.06, 25 GB free — which is what ruled out saturation and pointed at a lock.
+
+**Root cause.** A textbook ABBA deadlock, confirmed by `jstack` ("Found one Java-level deadlock"):
+
+- FIX thread, on a fill: `OmsService.onExecutionReport` (locks `OmsService`) →
+  `PnlService.onFill` (locks **PnlService**) → `PnlService.equity` → `AccountService.positions`
+  → wants **AccountService**.
+- Console thread, on an account open: `AccountService.openAccount` (locks **AccountService**) →
+  `AccountOpenedListener` → `PnlService.onAccountOpened` → wants **PnlService**.
+
+Two monitors, two orders. **This was latent long before this change** — `openAccount` had always
+notified its listeners while holding its own monitor — but it only ever held that monitor for a
+single position write, so the collision window was microseconds and nobody hit it. Seeding opened
+accounts across 25 symbols (P24) turned one write into ~50 under the same lock, and with 512
+accounts opening while fills were already flowing the two threads met almost immediately.
+
+**Impact.** Total broker outage, including the FIX session, from a single unlucky interleaving —
+and the failure presents as "the exchange won't accept logons", which sends you to the wrong
+process entirely. The exchange was healthy the whole time; its message-processor thread was parked
+on an empty queue.
+
+**Resolution.** `openAccount` now does its work in a private `openAccountLocked` under the monitor
+and notifies `AccountOpenedListener`s *after* releasing it, so the AccountService monitor is never
+held while acquiring PnlService's. Lock order is now consistently PnlService → AccountService.
+Lessons: (1) a callback invoked while holding a lock is a lock-order edge you did not intend to
+declare — notify listeners outside the critical section by default; (2) when a component that was
+"fine at 8 users" dies at 512, suspect a widened race before suspecting capacity, and let load
+average arbitrate — an idle box that is not serving requests is a lock, never a bottleneck; (3)
+`jstack` names the deadlock outright, so reach for it before reading any more logs.

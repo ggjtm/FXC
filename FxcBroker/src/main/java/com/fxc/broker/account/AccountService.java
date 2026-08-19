@@ -69,7 +69,32 @@ public final class AccountService {
      * @return the account, and whether this call is what created it
      * @throws IllegalStateException if opening is not enabled on this broker
      */
-    public synchronized OpenResult openAccount(String clientId, String ownerName) {
+    public OpenResult openAccount(String clientId, String ownerName) {
+        OpenResult result;
+        String owner;
+        synchronized (this) {
+            result = openAccountLocked(clientId, ownerName);
+            owner = lastOpenedOwner;
+        }
+        // Listeners are notified OUTSIDE this monitor, and that is load-bearing rather than tidy:
+        // PnlService.onAccountOpened takes the PnlService monitor and then reaches back into
+        // AccountService.positions() to capture a baseline, while a fill arriving on the FIX thread
+        // takes the same two monitors in the opposite order (OmsService.onExecutionReport ->
+        // PnlService.onFill -> AccountService.positions). Holding this lock across the callback is
+        // therefore an ABBA deadlock, and it wedged the whole broker — FIX session included — the
+        // first time account opening got slow enough to widen the window (fxc/docs/PROBLEMS.md P26).
+        if (result.opened()) {
+            for (AccountOpenedListener listener : openedListeners) {
+                listener.onAccountOpened(result.account(), owner);
+            }
+        }
+        return result;
+    }
+
+    /** Set by {@link #openAccountLocked} so the caller can notify listeners after releasing. */
+    private String lastOpenedOwner;
+
+    private OpenResult openAccountLocked(String clientId, String ownerName) {
         AccountOpeningPolicy policy = openingPolicy;
         if (!policy.enabled()) {
             throw new IllegalStateException("account opening is disabled on this broker");
@@ -110,9 +135,7 @@ public final class AccountService {
                 }
             }
         }
-        for (AccountOpenedListener listener : openedListeners) {
-            listener.onAccountOpened(number, owner);
-        }
+        lastOpenedOwner = owner;
         return new OpenResult(number, true);
     }
 
