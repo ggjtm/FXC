@@ -560,3 +560,30 @@ declare — notify listeners outside the critical section by default; (2) when a
 "fine at 8 users" dies at 512, suspect a widened race before suspecting capacity, and let load
 average arbitrate — an idle box that is not serving requests is a lock, never a bottleneck; (3)
 `jstack` names the deadlock outright, so reach for it before reading any more logs.
+
+## P27 — republished artifacts never reached deployed minions — **RESOLVED** (2026-08-19)
+
+**Symptom.** After rebuilding the four Java components and republishing them, a full `state.highstate`
+reported 87/87 with *no* changes beyond the ready probes, and the minion went on running the previous
+build: the installed jar kept its original mtime and the service kept its original PID. The P26
+deadlock fix appeared to deploy successfully and changed nothing.
+
+**Root cause.** Two independent gaps that hide each other.
+
+1. `archive.extracted` treats itself as satisfied once the archive's **paths** exist under `name`.
+   The publish pipeline deliberately writes stable filenames (`broker.tar` etc., P6) so pillar never
+   changes per build — which means a new build has byte-different contents and byte-identical paths,
+   and the state is a no-op. `source_hash` alone does not help: it validates the download, it does
+   not force extraction. The option that does is `source_hash_update: True`.
+2. No `running.sls` watched its own artifact — only `conf` and `unit`. So even once extraction was
+   fixed, a new build would land on disk while the old code kept running in memory.
+
+**Impact.** Silent and total: every artifact-level fix was undeployable, and the smoke test's earlier
+"clean brown-field no-op" — which I read as proof of idempotence — was actually proof of this bug.
+The failure has no error surface at all; it looks exactly like a successful converge.
+
+**Resolution.** `source_hash_update: True` on all five `archive.extracted` states, and each service
+now watches its own `archive:` in addition to its conf and unit. Lesson: a state that reports "no
+changes" is only good news if you know what it compares — and "the files are all present" is not
+"the files are correct". Verify a deploy by the artifact's identity (mtime, PID, a version marker),
+never by the converge summary.

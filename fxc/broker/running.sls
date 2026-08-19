@@ -31,7 +31,10 @@ fxc-broker-running:
 {% if 'mariadb' in roles %}
       - sls: fxc.mariadb.running
 {% endif %}
+    {#- The artifact is watched too: extracting a new build without restarting leaves the old
+        code running in memory, which reads as "the deploy did nothing" (P27). #}
     - watch:
+      - archive: fxc-broker-artifact
       - file: fxc-broker-conf
       - file: fxc-broker-unit
 

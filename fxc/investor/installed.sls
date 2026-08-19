@@ -22,6 +22,11 @@ fxc-investor-artifact:
     - name: {{ investor.install_dir }}
     - source: {{ investor.artifact_url }}
     - source_hash: {{ investor.artifact_sha256 }}
+    {#- Without this, archive.extracted considers itself satisfied as soon as the archive's PATHS
+        exist at the destination — so a republished tarball with identical filenames and different
+        bytes silently never lands, and the minion keeps running the old build forever
+        (fxc/docs/PROBLEMS.md P27). #}
+    - source_hash_update: True
     - archive_format: tar
     - enforce_toplevel: false
     - user: {{ common.service_user }}

@@ -19,6 +19,9 @@ fxc-investor-running:
 {% if 'broker' in roles %}
       - sls: fxc.broker.running
 {% endif %}
+    {#- The artifact is watched too: extracting a new build without restarting leaves the old
+        code running in memory, which reads as "the deploy did nothing" (P27). #}
     - watch:
+      - archive: fxc-investor-artifact
       - file: fxc-investor-conf
       - file: fxc-investor-unit
