@@ -45,7 +45,7 @@ class PubArchiveIntegrationTest {
                 // created_at >= 350 hot; older ones (100, 200, 300) archive.
                 for (int i = 1; i <= 5; i++) {
                     repo.insertStatus(new StatusRecord(FEED + "-" + i, FEED, "svc",
-                            "FILLED: BUY " + i + " ACME @ 42.0" + i, i * 100L, i));
+                            "FILLED: BUY " + i + " ARVX @ 42.0" + i, i * 100L, i));
                 }
 
                 // clock=1000, retention=650 → cutoff=350, so statuses with created_at < 350 archive.

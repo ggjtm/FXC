@@ -124,7 +124,7 @@ FxcPub here is XMPP-native: stock Tigase plus FXC's XMPP-client application laye
 ## Phase 6 — End-to-end demo & hardening — DONE
 
 - [x] `demo` script (`scripts/demo.sh`): brings up MariaDB + Tigase, starts all three backend
-  components in dependency order, seeds **two** investor accounts (cash + ACME shares — FxcBroker
+  components in dependency order, seeds **two** investor accounts (cash + ARVX shares — FxcBroker
   `Main` now seeds `account.dev`/`account.dev2`), runs two autonomous `rando` agents whose orders
   cross to produce fills, and streams the fills back off the FxcPub XMPP feed. Leaves infra up on
   exit (`--down` to tear down); backend logs in `build/demo-logs/`.

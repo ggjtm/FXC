@@ -7,6 +7,7 @@ import com.fxc.broker.model.Side;
 import com.fxc.common.instrument.AssetClass;
 import com.fxc.common.instrument.FxSpotInstrument;
 import com.fxc.common.instrument.Instrument;
+import com.fxc.common.instrument.InstrumentCatalog;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
@@ -26,6 +27,14 @@ public final class AccountService {
     private final BrokerRepository repository;
     // position key -> Position (authoritative working store; mirrored to the POSITION table)
     private final Map<String, Position> positions = new ConcurrentHashMap<>();
+    /**
+     * Secondary index, account -> its own positions. {@link #positions(String)} used to filter the
+     * whole flat map, which is fine at 3 symbols and quadratic-ish at 25: the console polls P&amp;L
+     * once a second across every account, and at 512 accounts x 26 positions that scan ran ~13.7M
+     * string comparisons per poll while holding the same lock that serializes order checks and
+     * fills. Maintained ONLY through {@link #register}.
+     */
+    private final Map<String, Map<String, Position>> byAccount = new ConcurrentHashMap<>();
     private final List<AccountOpenedListener> openedListeners = new CopyOnWriteArrayList<>();
     private volatile AccountOpeningPolicy openingPolicy = AccountOpeningPolicy.disabled();
 
@@ -76,12 +85,30 @@ public final class AccountService {
         String number = nextAccountNumber(policy);
         String owner = ownerName == null || ownerName.isBlank() ? "Agent " + clientId : ownerName;
         repository.upsertAccount(number, owner, policy.baseCurrency(), clientId);
-        Position cash = new Position(number, policy.baseCurrency(), HoldingType.CASH,
-                policy.seedCash(), BigDecimal.ZERO);
-        positions.put(cash.key(), cash);
+        Position cash = register(new Position(number, policy.baseCurrency(), HoldingType.CASH,
+                policy.seedCash(), BigDecimal.ZERO));
         repository.upsertPosition(cash);
-        if (policy.seedSymbol() != null && policy.seedShares().signum() > 0) {
-            seedShares(number, policy.seedSymbol(), policy.seedShares(), policy.seedSharePrice());
+        // Shares in EVERY listed name, not one. A rando investor picks a symbol at random and sells
+        // half the time; an account holding a single name rejects 24 of every 25 sells, and a book
+        // with no ask never trades (fxc/docs/PROBLEMS.md P24). Drawn from the issuer's reserve by
+        // transfer so the float stays invariant no matter how many investors spawn (P19).
+        if (policy.seedShares().signum() > 0) {
+            for (String symbol : policy.seedSymbols()) {
+                BigDecimal basis = policy.seedSharePrice() != null
+                        ? policy.seedSharePrice()
+                        : InstrumentCatalog.referencePrice(symbol).orElse(BigDecimal.ZERO);
+                String from = policy.seedFromAccount();
+                if (from != null && shares(from, symbol).compareTo(policy.seedShares()) >= 0) {
+                    transferShares(from, number, symbol, policy.seedShares());
+                } else {
+                    if (from != null) {
+                        System.out.println("[account] issuer reserve exhausted in " + symbol
+                                + "; minting " + policy.seedShares().toPlainString()
+                                + " for " + number + " (the float is no longer fixed)");
+                    }
+                    seedShares(number, symbol, policy.seedShares(), basis);
+                }
+            }
         }
         for (AccountOpenedListener listener : openedListeners) {
             listener.onAccountOpened(number, owner);
@@ -114,8 +141,8 @@ public final class AccountService {
                                          Map<String, BigDecimal> cashByCurrency) {
         repository.upsertAccount(accountNumber, ownerName, baseCcy);
         cashByCurrency.forEach((ccy, amount) -> {
-            Position p = new Position(accountNumber, ccy, HoldingType.CASH, amount, BigDecimal.ZERO);
-            positions.put(p.key(), p);
+            Position p = register(new Position(accountNumber, ccy, HoldingType.CASH, amount,
+                    BigDecimal.ZERO));
             repository.upsertPosition(p);
         });
     }
@@ -148,10 +175,20 @@ public final class AccountService {
         seedShares(to, symbol, shares(to, symbol).add(quantity), basis);
     }
 
+    /**
+     * The one place a Position enters the maps. Every create-or-replace goes through here so the
+     * per-account index cannot drift from the flat map — note seedShares REPLACES the object rather
+     * than mutating it, so the index must be overwritten, not appended to.
+     */
+    private Position register(Position p) {
+        positions.put(p.key(), p);
+        byAccount.computeIfAbsent(p.account(), a -> new ConcurrentHashMap<>()).put(p.key(), p);
+        return p;
+    }
+
     /** Seed an initial share position (dev/demo/tests). */
     public synchronized void seedShares(String account, String symbol, BigDecimal quantity, BigDecimal avgPrice) {
-        Position p = new Position(account, symbol, HoldingType.SHARE, quantity, avgPrice);
-        positions.put(p.key(), p);
+        Position p = register(new Position(account, symbol, HoldingType.SHARE, quantity, avgPrice));
         repository.upsertPosition(p);
     }
 
@@ -229,7 +266,7 @@ public final class AccountService {
     }
 
     public synchronized List<Position> positions(String account) {
-        return positions.values().stream().filter(p -> p.account().equals(account)).toList();
+        return List.copyOf(byAccount.getOrDefault(account, Map.of()).values());
     }
 
     /** Every account, ordered by number — the console's account list and P&amp;L series keys. */
@@ -249,16 +286,22 @@ public final class AccountService {
 
     private void adjustCash(String account, String currency, BigDecimal delta) {
         String key = Position.keyOf(account, HoldingType.CASH, currency);
-        Position p = positions.computeIfAbsent(key,
-                k -> new Position(account, currency, HoldingType.CASH, BigDecimal.ZERO, BigDecimal.ZERO));
+        Position p = positions.get(key);
+        if (p == null) {
+            p = register(new Position(account, currency, HoldingType.CASH, BigDecimal.ZERO,
+                    BigDecimal.ZERO));
+        }
         p.setQuantity(scaled(p.quantity().add(delta)));
         repository.upsertPosition(p);
     }
 
     private void addShares(String account, String symbol, BigDecimal deltaQty, BigDecimal price) {
         String key = Position.keyOf(account, HoldingType.SHARE, symbol);
-        Position p = positions.computeIfAbsent(key,
-                k -> new Position(account, symbol, HoldingType.SHARE, BigDecimal.ZERO, BigDecimal.ZERO));
+        Position p = positions.get(key);
+        if (p == null) {
+            p = register(new Position(account, symbol, HoldingType.SHARE, BigDecimal.ZERO,
+                    BigDecimal.ZERO));
+        }
         BigDecimal newQty = p.quantity().add(deltaQty);
         if (deltaQty.signum() > 0) {
             // volume-weighted average cost on buys

@@ -14,7 +14,7 @@ User={{ common.service_user }}
 Group={{ common.service_group }}
 WorkingDirectory={{ exchange.install_dir }}
 Environment=JAVA_HOME={{ jdk21_home }}
-Environment="JAVA_OPTS={{ gridgain_jvm_opts }} -Dgridgain.license.url=file://{{ exchange.install_dir }}/conf/gridgain-license.xml"
+Environment="JAVA_OPTS={{ gridgain_jvm_opts }} {{ fix_log_opts }} -Dgridgain.license.url=file://{{ exchange.install_dir }}/conf/gridgain-license.xml"
 ExecStart={{ exchange.install_dir }}/bin/FxcExchange
 Restart=on-failure
 RestartSec=5

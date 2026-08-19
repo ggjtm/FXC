@@ -15,7 +15,7 @@ import java.util.Currency;
  */
 public sealed interface Instrument permits FxSpotInstrument, EquityInstrument {
 
-    /** Exchange symbol, e.g. {@code "EUR/USD"} or {@code "ACME"}. */
+    /** Exchange symbol, e.g. {@code "EUR/USD"} or {@code "ARVX"}. */
     String symbol();
 
     /** The asset class, used only where asset-class-specific behavior is unavoidable. */

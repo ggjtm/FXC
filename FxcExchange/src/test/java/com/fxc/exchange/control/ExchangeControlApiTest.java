@@ -100,7 +100,7 @@ class ExchangeControlApiTest {
                 // --- status: open market, listed symbols, no depth yet ---
                 String status = body(web, http, "/api/status");
                 assertTrue(status.contains("\"marketState\":\"OPEN\""), status);
-                assertTrue(status.contains("\"symbol\":\"ACME\""), status);
+                assertTrue(status.contains("\"symbol\":\"ARVX\""), status);
                 assertTrue(status.contains("\"restingOrders\":0"), status);
                 assertTrue(status.contains("\"tradesPerSec\":"), status);
                 assertTrue(status.contains("\"wsClients\":0"), status);
@@ -109,13 +109,13 @@ class ExchangeControlApiTest {
                 assertTrue(body(web, http, "/api/config").contains("\"controlsEnabled\":true"));
 
                 // --- rest two orders, confirm they show up over REST ---
-                Session.sendToTarget(limit("C-B1", Side.BUY, "ACME", "42.00", 100), broker);
-                Session.sendToTarget(limit("C-S1", Side.SELL, "ACME", "42.90", 150), broker);
+                Session.sendToTarget(limit("C-B1", Side.BUY, "ARVX", "42.00", 100), broker);
+                Session.sendToTarget(limit("C-S1", Side.SELL, "ARVX", "42.90", 150), broker);
                 waitUntil(() -> body(web, http, "/api/status").contains("\"restingOrders\":2"), 8000);
 
                 // Prices are compared numerically: an order's price scale is whatever came off the
                 // FIX wire, so asserting the literal "42.00" would pin an unrelated quirk.
-                String book = body(web, http, "/api/book?symbol=ACME");
+                String book = body(web, http, "/api/book?symbol=ARVX");
                 assertEquals(42.00, firstNumber(book, "bids", "price"), 1e-9, book);
                 assertEquals(100.0, firstNumber(book, "bids", "size"), 1e-9, book);
                 assertEquals(42.90, firstNumber(book, "asks", "price"), 1e-9, book);
@@ -125,7 +125,7 @@ class ExchangeControlApiTest {
                 assertTrue(post(web, http, "/api/session/halt").contains("\"marketState\":\"HALTED\""));
                 assertTrue(body(web, http, "/api/status").contains("\"marketState\":\"HALTED\""));
 
-                Session.sendToTarget(limit("C-B2", Side.BUY, "ACME", "41.00", 100), broker);
+                Session.sendToTarget(limit("C-B2", Side.BUY, "ARVX", "41.00", 100), broker);
                 waitUntil(() -> rejectFor(client, "C-B2") != null, 8000);
                 quickfix.fix44.ExecutionReport reject = rejectFor(client, "C-B2");
                 assertTrue(reject != null, "halted market should reject the order");
@@ -134,14 +134,14 @@ class ExchangeControlApiTest {
 
                 // --- resume: orders flow again ---
                 assertTrue(post(web, http, "/api/session/open").contains("\"marketState\":\"OPEN\""));
-                Session.sendToTarget(limit("C-B3", Side.BUY, "ACME", "41.50", 100), broker);
+                Session.sendToTarget(limit("C-B3", Side.BUY, "ARVX", "41.50", 100), broker);
                 waitUntil(() -> ackFor(client, "C-B3"), 8000);
                 assertTrue(ackFor(client, "C-B3"), "resumed market should accept orders");
 
                 // --- clear the book: three resting orders cancelled and reported back over FIX ---
-                String cleared = post(web, http, "/api/book/clear?symbol=ACME");
+                String cleared = post(web, http, "/api/book/clear?symbol=ARVX");
                 assertTrue(cleared.contains("\"cancelled\":3"), "expected 3 cancels, got: " + cleared);
-                assertTrue(cleared.contains("\"symbol\":\"ACME\""), cleared);
+                assertTrue(cleared.contains("\"symbol\":\"ARVX\""), cleared);
 
                 waitUntil(() -> cancelledFor(client, "C-B1") && cancelledFor(client, "C-S1")
                         && cancelledFor(client, "C-B3"), 8000);
@@ -149,22 +149,22 @@ class ExchangeControlApiTest {
                 assertTrue(cancelledFor(client, "C-S1"), "broker must be told C-S1 was cancelled");
                 assertTrue(cancelledFor(client, "C-B3"), "broker must be told C-B3 was cancelled");
 
-                String afterClear = body(web, http, "/api/book?symbol=ACME");
+                String afterClear = body(web, http, "/api/book?symbol=ARVX");
                 assertTrue(afterClear.contains("\"bids\":[]") && afterClear.contains("\"asks\":[]"), afterClear);
                 assertTrue(body(web, http, "/api/status").contains("\"restingOrders\":0"));
 
                 // --- per-symbol halt leaves other symbols trading ---
-                assertTrue(post(web, http, "/api/session/halt?symbol=ACME").contains("\"symbol\":\"ACME\""));
+                assertTrue(post(web, http, "/api/session/halt?symbol=ARVX").contains("\"symbol\":\"ARVX\""));
                 String perSymbol = body(web, http, "/api/status");
                 assertTrue(perSymbol.contains("\"marketState\":\"OPEN\""), "market itself stays open");
-                assertTrue(perSymbol.contains("\"symbol\":\"ACME\",\"state\":\"HALTED\""), perSymbol);
-                assertTrue(perSymbol.contains("\"symbol\":\"GLOBEX\",\"state\":\"OPEN\""), perSymbol);
+                assertTrue(perSymbol.contains("\"symbol\":\"ARVX\",\"state\":\"HALTED\""), perSymbol);
+                assertTrue(perSymbol.contains("\"symbol\":\"BLTN\",\"state\":\"OPEN\""), perSymbol);
 
-                Session.sendToTarget(limit("C-B4", Side.BUY, "ACME", "41.00", 100), broker);
+                Session.sendToTarget(limit("C-B4", Side.BUY, "ARVX", "41.00", 100), broker);
                 waitUntil(() -> rejectFor(client, "C-B4") != null, 8000);
                 assertTrue(rejectFor(client, "C-B4") != null, "halted symbol should reject");
 
-                Session.sendToTarget(limit("C-B5", Side.BUY, "GLOBEX", "10.00", 100), broker);
+                Session.sendToTarget(limit("C-B5", Side.BUY, "BLTN", "10.00", 100), broker);
                 waitUntil(() -> ackFor(client, "C-B5"), 8000);
                 assertTrue(ackFor(client, "C-B5"), "an open symbol should still accept orders");
 
@@ -177,7 +177,7 @@ class ExchangeControlApiTest {
                 assertEquals(405, postRaw(web, http, "/api/status").statusCode());
                 assertEquals(400, get(web, http, "/api/book").statusCode(), "symbol is required");
                 assertEquals(404, get(web, http, "/api/book?symbol=NOPE").statusCode());
-                assertEquals(400, get(web, http, "/api/candles?symbol=ACME&granularity=7q").statusCode(),
+                assertEquals(400, get(web, http, "/api/candles?symbol=ARVX&granularity=7q").statusCode(),
                         "an unusable granularity is a bad request, not a server fault");
             } finally {
                 initiator.stop();
@@ -196,7 +196,7 @@ class ExchangeControlApiTest {
 
             // Read paths stay available...
             assertEquals(200, get(web, http, "/api/status").statusCode());
-            assertEquals(200, get(web, http, "/api/book?symbol=ACME").statusCode());
+            assertEquals(200, get(web, http, "/api/book?symbol=ARVX").statusCode());
             assertTrue(body(web, http, "/api/config").contains("\"controlsEnabled\":false"));
 
             // ...but the mutating endpoints are not registered at all.

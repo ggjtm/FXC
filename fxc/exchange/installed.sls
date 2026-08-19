@@ -2,7 +2,7 @@
     build/publish step producing exchange.artifact_url doesn't exist yet — pillar-driven so the
     URL/hash slot exists now and gets filled in once it does). #}
 {% from 'fxc/exchange/map.jinja' import exchange with context %}
-{% from 'fxc/map.jinja' import fxc as common, jdk21_home, gridgain_jvm_opts with context %}
+{% from 'fxc/map.jinja' import fxc as common, jdk21_home, gridgain_jvm_opts, fix_log_opts with context %}
 
 include:
   - fxc.common.installed
@@ -72,6 +72,7 @@ fxc-exchange-unit:
         common: {{ common | tojson }}
         jdk21_home: {{ jdk21_home | tojson }}
         gridgain_jvm_opts: {{ gridgain_jvm_opts | tojson }}
+        fix_log_opts: {{ fix_log_opts | tojson }}
     - require:
       - archive: fxc-exchange-artifact
 

@@ -25,25 +25,58 @@ class Instrument:
     lot_size: Decimal
     quote_currency: str
     is_fx: bool
+    reference_price: Decimal | None = None
 
 
-# Mirrors InstrumentCatalog.defaults(): four FX pairs (5-dp majors, JPY to 3 dp) and three equities.
-CATALOG: dict[str, Instrument] = {
-    inst.symbol: inst
-    for inst in (
-        Instrument("EUR/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
-        Instrument("GBP/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
-        Instrument("USD/JPY", Decimal("0.001"), Decimal("1000"), "JPY", True),
-        Instrument("AUD/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
-        Instrument("ACME", Decimal("0.01"), Decimal("1"), "USD", False),
-        Instrument("GLOBEX", Decimal("0.01"), Decimal("1"), "USD", False),
-        Instrument("INITECH", Decimal("0.01"), Decimal("1"), "USD", False),
-    )
-}
+# Mirrors InstrumentCatalog.LISTINGS: twenty-five fictitious equities, each with its own opening
+# price. Prices matter as much as ticks here — seeding every book at one price put a rando's orders
+# hundreds of percent away from the book on the expensive names, so they never crossed.
+_EQUITIES: tuple[Instrument, ...] = (
+    Instrument("ARVX", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("18.25")),
+    Instrument("BLTN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("9.60")),
+    Instrument("CRVN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("46.75")),
+    Instrument("DYNL", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("132.40")),
+    Instrument("ELXR", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("74.15")),
+    Instrument("FRTH", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("31.05")),
+    Instrument("GRVT", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("208.60")),
+    Instrument("HLYN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("22.90")),
+    Instrument("IVRN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("63.30")),
+    Instrument("JNTR", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("15.45")),
+    Instrument("KLSO", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("38.70")),
+    Instrument("LUMR", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("87.25")),
+    Instrument("MRDN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("26.15")),
+    Instrument("NVSK", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("154.80")),
+    Instrument("ORBN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("96.50")),
+    Instrument("PLTH", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("11.35")),
+    Instrument("QRVN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("41.60")),
+    Instrument("RDSN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("58.95")),
+    Instrument("STLR", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("19.80")),
+    Instrument("TRQL", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("33.20")),
+    Instrument("UPLN", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("112.05")),
+    Instrument("VNTA", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("68.40")),
+    Instrument("WSTB", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("14.70")),
+    Instrument("XNTH", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("245.30")),
+    Instrument("YRRA", Decimal("0.01"), Decimal("1"), "USD", False, Decimal("29.55")),
+)
 
-#: The equities the demo actually trades. FX pairs move two currency balances rather than a share
-#: position, so the liquidity policy's "sell assets to restore cash" has no equivalent for them.
-EQUITIES: tuple[str, ...] = ("ACME", "GLOBEX", "INITECH")
+# NO LONGER LISTED — the exchange rejects these (fxc/docs/PROBLEMS.md P23). They stay in CATALOG
+# because ofx.security_id's "FX:" branch is still live code on both sides of the wire and the golden
+# fixture sample_data/ofx-order-eurusd.xml pins it. They are absent from EQUITIES, which is what
+# "the tradable universe" means here.
+_FX: tuple[Instrument, ...] = (
+    Instrument("EUR/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
+    Instrument("GBP/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
+    Instrument("USD/JPY", Decimal("0.001"), Decimal("1000"), "JPY", True),
+    Instrument("AUD/USD", Decimal("0.00001"), Decimal("1000"), "USD", True),
+)
+
+CATALOG: dict[str, Instrument] = {inst.symbol: inst for inst in (*_EQUITIES, *_FX)}
+
+#: The equities the demo actually trades, in listing order. An empty ``--symbols`` resolves to
+#: exactly this, which is what keeps the 25-name list out of the Salt pillar, the systemd unit and
+#: docker-compose. FX pairs move two currency balances rather than a share position, so the
+#: liquidity policy's "sell assets to restore cash" has no equivalent for them.
+EQUITIES: tuple[str, ...] = tuple(inst.symbol for inst in _EQUITIES)
 
 
 def find(symbol: str) -> Instrument:

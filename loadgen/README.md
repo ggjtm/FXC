@@ -120,7 +120,7 @@ second, and the rest take effect on the next swarm.
 | `FXC_BROKER_CONSOLE_URL` | `--broker-console-url` | *(empty)* | FxcBroker console; each investor opens **its own account** there, so the console's per-account P&L is per investor. Empty falls back to `--accounts` |
 | `FXC_CLIENT_PREFIX` | `--client-prefix` | `locust` | client-id prefix for opened accounts (`locust-0`, `locust-1`, …) |
 | `FXC_ACCOUNTS` | `--accounts` | `000000001,000000002` | shared fallback (the market-maker accounts), used only when opening is unavailable; investors spread round-robin |
-| `FXC_SYMBOLS` | `--symbols` | `ACME` | |
+| `FXC_SYMBOLS` | `--symbols` | `ARVX` | |
 | `FXC_MIX_RANDO` | `--mix-rando` | `0` | share of users running `rando`; all three at 0 means **one of each** |
 | `FXC_MIX_BOOKER` | `--mix-booker` | `0` | |
 | `FXC_MIX_BOOKFISH` | `--mix-bookfish` | `0` | |

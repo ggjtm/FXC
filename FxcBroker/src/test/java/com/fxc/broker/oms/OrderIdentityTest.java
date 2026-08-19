@@ -52,7 +52,7 @@ class OrderIdentityTest {
             AccountService accounts = new AccountService(repository);
             for (String account : new String[] {ACCOUNT_A, ACCOUNT_B}) {
                 accounts.seedAccount(account, "Dev", "USD", Map.of("USD", new BigDecimal("100000")));
-                accounts.seedShares(account, "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+                accounts.seedShares(account, "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
             }
             OmsService oms = new OmsService(accounts, repository);
             oms.setRouter(new SilentRouter());
@@ -71,8 +71,8 @@ class OrderIdentityTest {
     }
 
     private static BigDecimal totalShares(AccountService accounts) {
-        return held(accounts, ACCOUNT_A, "ACME", HoldingType.SHARE)
-                .add(held(accounts, ACCOUNT_B, "ACME", HoldingType.SHARE));
+        return held(accounts, ACCOUNT_A, "ARVX", HoldingType.SHARE)
+                .add(held(accounts, ACCOUNT_B, "ARVX", HoldingType.SHARE));
     }
 
     private static BigDecimal totalCash(AccountService accounts) {
@@ -82,7 +82,7 @@ class OrderIdentityTest {
 
     private static void submit(OmsService oms, String account, String clOrdId, Side side, String px,
                                String qty) {
-        oms.submit(account, clOrdId, "ACME", side, OrderType.LIMIT, new BigDecimal(px),
+        oms.submit(account, clOrdId, "ARVX", side, OrderType.LIMIT, new BigDecimal(px),
                 new BigDecimal(qty));
     }
 
@@ -93,9 +93,9 @@ class OrderIdentityTest {
         // behaviour replaced the first order in the map, and later fills for it landed on the second
         // agent's account and side.
         withOms(workDir, 47620, (oms, accounts) -> {
-            OrderResult first = oms.submit(ACCOUNT_A, "INV-1", "ACME", Side.BUY, OrderType.LIMIT,
+            OrderResult first = oms.submit(ACCOUNT_A, "INV-1", "ARVX", Side.BUY, OrderType.LIMIT,
                     new BigDecimal("42.00"), new BigDecimal("5"));
-            OrderResult second = oms.submit(ACCOUNT_B, "INV-1", "ACME", Side.SELL, OrderType.LIMIT,
+            OrderResult second = oms.submit(ACCOUNT_B, "INV-1", "ARVX", Side.SELL, OrderType.LIMIT,
                     new BigDecimal("42.00"), new BigDecimal("5"));
 
             assertTrue(first.accepted());
@@ -119,12 +119,12 @@ class OrderIdentityTest {
 
             oms.onExecutionReport("A-1", "EXEC-1", "EX-1", true, false, new BigDecimal("10"),
                     new BigDecimal("42.00"), new BigDecimal("10"), null, Side.BUY);
-            BigDecimal sharesAfterFirst = held(accounts, ACCOUNT_A, "ACME", HoldingType.SHARE);
+            BigDecimal sharesAfterFirst = held(accounts, ACCOUNT_A, "ARVX", HoldingType.SHARE);
 
             oms.onExecutionReport("A-1", "EXEC-1", "EX-1", true, false, new BigDecimal("10"),
                     new BigDecimal("42.00"), new BigDecimal("10"), null, Side.BUY);
 
-            assertEquals(0, sharesAfterFirst.compareTo(held(accounts, ACCOUNT_A, "ACME", HoldingType.SHARE)),
+            assertEquals(0, sharesAfterFirst.compareTo(held(accounts, ACCOUNT_A, "ARVX", HoldingType.SHARE)),
                     "the replay must not add shares a second time");
             assertEquals(1, oms.duplicateReportCount());
             // One fill of 10 shares against one account: +10 shares, -420 cash. No more, no less.
@@ -170,9 +170,9 @@ class OrderIdentityTest {
 
             assertEquals(0, totalShares(accounts).compareTo(sharesBefore), "shares conserved");
             assertEquals(0, totalCash(accounts).compareTo(cashBefore), "cash conserved");
-            assertEquals(0, held(accounts, ACCOUNT_A, "ACME", HoldingType.SHARE)
+            assertEquals(0, held(accounts, ACCOUNT_A, "ARVX", HoldingType.SHARE)
                     .compareTo(new BigDecimal("1010")));
-            assertEquals(0, held(accounts, ACCOUNT_B, "ACME", HoldingType.SHARE)
+            assertEquals(0, held(accounts, ACCOUNT_B, "ARVX", HoldingType.SHARE)
                     .compareTo(new BigDecimal("990")));
         });
     }

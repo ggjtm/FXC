@@ -40,13 +40,13 @@ class FeedIngestionIT {
             MarketView market = new MarketView();
             subscriber.subscribeFeed(BROKER, market);
 
-            publisher.publishStatus(BROKER, "FILLED: BUY 100 ACME @ 42.1");
+            publisher.publishStatus(BROKER, "FILLED: BUY 100 ARVX @ 42.1");
 
-            waitUntil(() -> market.lastSale("ACME").isPresent(), 10_000);
+            waitUntil(() -> market.lastSale("ARVX").isPresent(), 10_000);
 
-            assertTrue(market.lastSale("ACME").isPresent(), "investor should receive the fill over XMPP");
-            assertEquals(0, market.lastSale("ACME").get().compareTo(new BigDecimal("42.1")));
-            assertEquals(0, market.tradedVolume("ACME").get(new BigDecimal("42.1")).compareTo(new BigDecimal("100")));
+            assertTrue(market.lastSale("ARVX").isPresent(), "investor should receive the fill over XMPP");
+            assertEquals(0, market.lastSale("ARVX").get().compareTo(new BigDecimal("42.1")));
+            assertEquals(0, market.tradedVolume("ARVX").get(new BigDecimal("42.1")).compareTo(new BigDecimal("100")));
         }
     }
 

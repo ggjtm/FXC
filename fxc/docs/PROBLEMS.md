@@ -455,3 +455,72 @@ a formula mirrors a compose file's env contract, mirror the CONTRACT (every knob
 reads), not the subset the compose file happened to set — anything the compose stack agreed on
 implicitly via shared defaults becomes an invisible coupling the moment one side goes
 pillar-driven.
+
+## P23 — the tradeable universe was hardcoded in two languages — **RESOLVED** (2026-08-19)
+
+**Symptom.** Re-pointing the demo at 25 fictitious stocks looked like a pillar edit and was not.
+`InstrumentCatalog.defaults()` returned a hardcoded `List.of(...)` of 4 FX pairs + 3 equities, and
+`loadgen/fxc_loadgen/instruments.py` mirrored the same seven by hand. Nothing read the symbol set
+from config, and `fxc:locust:symbols` merely *chose* from it.
+
+**Impact.** Every consumer keys off the catalog — the exchange lists books from it, the broker
+subscribes market data and validates orders against it, all four strategies snap ticks through it —
+so a symbol absent from it is rejected by the matching engine **asynchronously over FIX**, while the
+OFX reply still says ROUTED. A pillar-supplied symbol the catalog didn't know would have produced
+load that looked accepted and never traded: the hardest failure mode in this system to see.
+
+**Resolution.** `InstrumentCatalog.LISTINGS` is now the single table (symbol, issuer, reference
+price), with `defaults()`/`bySymbol()`/`REFERENCE_PRICES` derived from it once at class-init rather
+than rebuilt per call — `find()` is on a per-order hot path and used to allocate a fresh map every
+time. `resolveSymbols(spec)` accepts `*`/blank for "every listed equity" and validates anything else,
+so the 25-name list never appears in a conf file, a Salt pillar, the systemd unit, or
+docker-compose; `FXC_SYMBOLS=`, `account.seedSymbol=*` and `agent.symbol=*` all resolve from the
+catalog. FX pairs are de-listed but `FxSpotInstrument`, the `CURRENCY_EXCHANGE` settlement style and
+the OFX `FX:` wire branch stay compiled and unit-tested — they are the second `Instrument`
+implementation that keeps the abstraction honest. The Python mirror is now pinned symbol-by-symbol
+*and price-by-price* by `loadgen/tests/test_instruments.py`, so cross-language drift is a test
+failure rather than a book that prices itself wrongly. Lesson: "make it configurable" is a claim
+about the whole consumer chain, not about the one file you were reading — `InstrumentCatalog`'s own
+javadoc had promised "loading from config is a straightforward extension" since the first commit.
+
+## P24 — cash-only account opening cannot work with more than one listed symbol — **RESOLVED** (2026-08-19)
+
+**Symptom.** With 25 books and 512 rando investors, 24 books would never trade. Rando coin-flips
+BUY/SELL over a randomly chosen symbol, but `account.open.seedShares` defaulted to 0, so every
+opened account was cash-only and every SELL came back `insufficient shares for equity sell (no
+shorting)`. No investor could quote an ask; buys rested unmatched forever.
+
+**Root cause.** Cash-only opening was a deliberate fix for the root `docs/PROBLEMS.md` P19 (260
+agents minting 260,000 shares against a 2,000-share float pushed the price down 23%), and
+`account.seedSymbol` was a scalar, so the float existed for exactly ONE symbol anyway. Both
+assumptions were load-bearing only while the universe had a single tradeable name.
+
+**Resolution.** The float is issued and placed **per symbol** (`account.issue.shares` /
+`account.mm.shares` are per listing, not divided — dividing would leave each name too thin for 512
+investors and would silently dilute every existing name whenever a 26th listed), and opened accounts
+now receive shares in every listed symbol **transferred off the issuer's reserve** rather than
+minted. That keeps P19's invariant — market-wide outstanding stays exactly what was issued no matter
+how many investors spawn — while giving all 25 books two sides from the first tick. Minting survives
+only as a logged fallback when the reserve is exhausted. `AccountOpeningPolicy` grew `seedSymbols`
+(list), a nullable `seedSharePrice` (null = each symbol's catalog price) and `seedFromAccount`;
+`Main` validates `2 x mm <= issued` *before* the listener opens, because with 25 symbols an
+over-allocation would otherwise die on symbol 4 and leave a half-seeded market behind a live port.
+`AccountOpeningTest` now asserts the stronger invariant (issuer + investors == issued) instead of
+"investors minted nothing". Lesson: a rule ("accounts are cash-only") outlives the reason for it;
+when the premise changes, re-derive the rule rather than defending it.
+
+## P25 — the publish script's "atomic" staging was a cross-device copy — **RESOLVED** (2026-08-19)
+
+**Symptom.** `scripts/publish-artifacts.sh` staged into `mktemp -d` (i.e. `/tmp`, on the master's
+root fs) and then `mv`'d each tarball into `/srv/fxc-artifacts`, which is a separate 23 GB ZFS pool.
+Its own comment claimed "Per-file atomic-ish: rename tar then its sidecar".
+
+**Impact.** A cross-filesystem `mv` is copy-then-unlink, not `rename(2)`. A minion fetching during a
+publish could read a partially written 64 MB tarball — and would fail its `source_hash` check, which
+looks exactly like a corrupt artifact rather than a race. Secondarily, ~250 MB of the publish landed
+on the 8 GB root fs, which was already at 99%.
+
+**Resolution.** Stage into a temp dir alongside the docroot, so the `mv` is a genuine same-filesystem
+rename and the build's byproducts stay off root. Lesson: "atomic rename" is a property of a
+filesystem boundary, not of the `mv` command — and a comment asserting atomicity is worth checking
+against `df` the moment the docroot moves.

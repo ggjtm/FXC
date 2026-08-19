@@ -26,8 +26,8 @@ class OrderBookTest {
 
     private static final Instrument EURUSD =
             FxSpotInstrument.of(EUR, USD, new BigDecimal("0.00001"), new BigDecimal("1000"));
-    private static final Instrument ACME =
-            EquityInstrument.of("ACME", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
+    private static final Instrument ARVX =
+            EquityInstrument.of("ARVX", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
 
     private final AtomicLong seq = new AtomicLong();
 
@@ -226,13 +226,13 @@ class OrderBookTest {
 
     @Test
     void equityInstrumentMatchesToo() {
-        OrderBook b = book(ACME);
-        b.submit(limit("ask1", "mm", ACME, Side.SELL, "42.10", "100"));
-        Order buy = limit("buy1", "taker", ACME, Side.BUY, "42.10", "100");
+        OrderBook b = book(ARVX);
+        b.submit(limit("ask1", "mm", ARVX, Side.SELL, "42.10", "100"));
+        Order buy = limit("buy1", "taker", ARVX, Side.BUY, "42.10", "100");
         List<Trade> trades = b.submit(buy);
 
         assertEquals(1, trades.size());
-        assertEquals("ACME", trades.get(0).symbol());
+        assertEquals("ARVX", trades.get(0).symbol());
         eq("42.10", trades.get(0).price());
         assertEquals(OrderStatus.FILLED, buy.status());
     }
@@ -298,8 +298,8 @@ class OrderBookTest {
     @Test
     void engineCancelDelegatesToBook() {
         MatchingEngine engine = new MatchingEngine();
-        engine.list(ACME);
-        engine.submit(new NewOrder("o1", "brk", "ACME", Side.BUY,
+        engine.list(ARVX);
+        engine.submit(new NewOrder("o1", "brk", "ARVX", Side.BUY,
                 OrderType.LIMIT, new BigDecimal("42.10"), new BigDecimal("100")));
 
         assertTrue(engine.cancel("o1").isPresent());

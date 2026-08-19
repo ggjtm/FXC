@@ -30,15 +30,20 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class AccountOpeningTest {
 
-    /** The shipped policy: cash only, so opening accounts cannot inflate the float. */
+    /** Cash only: the simplest policy that cannot inflate the float. */
     private static final AccountOpeningPolicy POLICY = new AccountOpeningPolicy(
-            true, "USD", new BigDecimal("1000000"), "ACME", BigDecimal.ZERO,
-            new BigDecimal("42.00"), 100_000L, 9);
+            true, "USD", new BigDecimal("1000000"), List.of("ARVX"), BigDecimal.ZERO,
+            new BigDecimal("42.00"), null, 100_000L, 9);
 
-    /** Opt-in share seeding, kept working for anyone who wants an agent to start long. */
+    /** Minting share seeding (no source account) — still supported, still inflates the float. */
     private static final AccountOpeningPolicy WITH_SHARES = new AccountOpeningPolicy(
-            true, "USD", new BigDecimal("1000000"), "ACME", new BigDecimal("1000"),
-            new BigDecimal("42.00"), 100_000L, 9);
+            true, "USD", new BigDecimal("1000000"), List.of("ARVX"), new BigDecimal("1000"),
+            new BigDecimal("42.00"), null, 100_000L, 9);
+
+    /** The shipped policy: shares drawn FROM the issuer, so the total never moves. */
+    private static final AccountOpeningPolicy FROM_ISSUER = new AccountOpeningPolicy(
+            true, "USD", new BigDecimal("1000000"), List.of("ARVX"), new BigDecimal("100"),
+            new BigDecimal("42.00"), "000123456", 100_000L, 9);
 
     private interface Scenario {
         void run(AccountService accounts, BrokerRepository repository);
@@ -84,7 +89,7 @@ class AccountOpeningTest {
             // Same purchasing power as every other agent, so the console's curves are comparable.
             assertEquals(0, new BigDecimal("1000000").compareTo(cash(accounts, result.account(), "USD")));
             // And no shares: an opened account that carried stock would mint it (docs/PROBLEMS.md P19).
-            assertEquals(0, BigDecimal.ZERO.compareTo(shares(accounts, result.account(), "ACME")));
+            assertEquals(0, BigDecimal.ZERO.compareTo(shares(accounts, result.account(), "ARVX")));
         });
     }
 
@@ -95,21 +100,21 @@ class AccountOpeningTest {
         // with 260,000 shares against a 2,000-share float (docs/PROBLEMS.md P19).
         withAccounts(workDir, 47626, POLICY, (accounts, repository) -> {
             accounts.seedAccount("000000001", "FXC Issuer", "USD", Map.of());
-            accounts.seedShares("000000001", "ACME", new BigDecimal("1000000"), new BigDecimal("42.00"));
+            accounts.seedShares("000000001", "ARVX", new BigDecimal("1000000"), new BigDecimal("42.00"));
             for (String maker : List.of("000123456", "000654321")) {
                 accounts.seedAccount(maker, "Market Maker", "USD",
                         Map.of("USD", new BigDecimal("1000000")));
-                accounts.transferShares("000000001", maker, "ACME", new BigDecimal("500000"));
+                accounts.transferShares("000000001", maker, "ARVX", new BigDecimal("500000"));
             }
 
-            assertEquals(0, BigDecimal.ZERO.compareTo(shares(accounts, "000000001", "ACME")),
+            assertEquals(0, BigDecimal.ZERO.compareTo(shares(accounts, "000000001", "ARVX")),
                     "the issuer placed all of it");
-            assertEquals(0, new BigDecimal("500000").compareTo(shares(accounts, "000123456", "ACME")));
-            assertEquals(0, new BigDecimal("500000").compareTo(shares(accounts, "000654321", "ACME")));
+            assertEquals(0, new BigDecimal("500000").compareTo(shares(accounts, "000123456", "ARVX")));
+            assertEquals(0, new BigDecimal("500000").compareTo(shares(accounts, "000654321", "ARVX")));
             // The invariant that matters: the total is exactly what was issued.
-            BigDecimal total = shares(accounts, "000000001", "ACME")
-                    .add(shares(accounts, "000123456", "ACME"))
-                    .add(shares(accounts, "000654321", "ACME"));
+            BigDecimal total = shares(accounts, "000000001", "ARVX")
+                    .add(shares(accounts, "000123456", "ARVX"))
+                    .add(shares(accounts, "000654321", "ARVX"));
             assertEquals(0, new BigDecimal("1000000").compareTo(total));
         });
     }
@@ -118,10 +123,10 @@ class AccountOpeningTest {
     void theFloatCannotBeOverAllocated(@TempDir java.nio.file.Path workDir) throws Exception {
         withAccounts(workDir, 47627, POLICY, (accounts, repository) -> {
             accounts.seedAccount("000000001", "FXC Issuer", "USD", Map.of());
-            accounts.seedShares("000000001", "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+            accounts.seedShares("000000001", "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
             accounts.seedAccount("000123456", "Market Maker", "USD", Map.of("USD", BigDecimal.ONE));
             assertThrows(IllegalArgumentException.class, () ->
-                    accounts.transferShares("000000001", "000123456", "ACME", new BigDecimal("1001")));
+                    accounts.transferShares("000000001", "000123456", "ARVX", new BigDecimal("1001")));
         });
     }
 
@@ -131,18 +136,42 @@ class AccountOpeningTest {
         // is whatever the seeded accounts hold, and it must not move when agents arrive.
         withAccounts(workDir, 47619, POLICY, (accounts, repository) -> {
             accounts.seedAccount("000123456", "Dev", "USD", Map.of("USD", new BigDecimal("1000000")));
-            accounts.seedShares("000123456", "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
-            BigDecimal floatBefore = shares(accounts, "000123456", "ACME");
+            accounts.seedShares("000123456", "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
+            BigDecimal floatBefore = shares(accounts, "000123456", "ARVX");
 
             BigDecimal opened = BigDecimal.ZERO;
             for (int i = 0; i < 20; i++) {
                 String account = accounts.openAccount("locust-" + i, null).account();
-                opened = opened.add(shares(accounts, account, "ACME"));
+                opened = opened.add(shares(accounts, account, "ARVX"));
             }
 
             assertEquals(0, BigDecimal.ZERO.compareTo(opened), "20 investors minted no stock");
-            assertEquals(0, floatBefore.compareTo(shares(accounts, "000123456", "ACME")),
+            assertEquals(0, floatBefore.compareTo(shares(accounts, "000123456", "ARVX")),
                     "and the float is untouched");
+        });
+    }
+
+    @Test
+    void openingAccountsFromTheIssuerConservesTheFloat(@TempDir java.nio.file.Path workDir)
+            throws Exception {
+        // The stronger form of the invariant above, and the one the demo actually ships: opened
+        // accounts DO carry stock (25 books need two sides from tick one — fxc/docs/PROBLEMS.md
+        // P24), but every share is transferred off the issuer rather than minted, so the market-wide
+        // total is exactly what was issued no matter how many investors arrive.
+        withAccounts(workDir, 47620, FROM_ISSUER, (accounts, repository) -> {
+            accounts.seedAccount("000123456", "Issuer", "USD", Map.of("USD", new BigDecimal("1000000")));
+            accounts.seedShares("000123456", "ARVX", new BigDecimal("5000"), new BigDecimal("42.00"));
+            BigDecimal totalBefore = shares(accounts, "000123456", "ARVX");
+
+            BigDecimal held = BigDecimal.ZERO;
+            for (int i = 0; i < 20; i++) {
+                String account = accounts.openAccount("locust-" + i, null).account();
+                held = held.add(shares(accounts, account, "ARVX"));
+            }
+
+            assertEquals(0, new BigDecimal("2000").compareTo(held), "20 investors x 100 shares each");
+            assertEquals(0, totalBefore.compareTo(shares(accounts, "000123456", "ARVX").add(held)),
+                    "issuer + investors is still exactly the issued float");
         });
     }
 
@@ -150,7 +179,7 @@ class AccountOpeningTest {
     void shareSeedingRemainsAvailableWhenAskedFor(@TempDir java.nio.file.Path workDir) throws Exception {
         withAccounts(workDir, 47625, WITH_SHARES, (accounts, repository) -> {
             String account = accounts.openAccount("investor-a", null).account();
-            assertEquals(0, new BigDecimal("1000").compareTo(shares(accounts, account, "ACME")));
+            assertEquals(0, new BigDecimal("1000").compareTo(shares(accounts, account, "ARVX")));
         });
     }
 
@@ -201,7 +230,7 @@ class AccountOpeningTest {
             String account = accounts.openAccount("investor-a", null).account();
             // The pre-trade check is where an unfunded or unknown account would surface.
             assertTrue(accounts.check(account, com.fxc.common.instrument.InstrumentCatalog.bySymbol()
-                            .get("ACME"), com.fxc.broker.model.Side.BUY, new BigDecimal("42.00"),
+                            .get("ARVX"), com.fxc.broker.model.Side.BUY, new BigDecimal("42.00"),
                     new BigDecimal("10")).isEmpty());
         });
     }

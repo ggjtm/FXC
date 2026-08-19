@@ -117,7 +117,7 @@ class PubIntegrationIT {
 
             liquidity.start();
             assertTrue(liquidity.awaitLogon(), "liquidity should log on to the exchange");
-            liquidity.restSell("ACME", "42.10", 100);
+            liquidity.restSell("ARVX", "42.10", 100);
 
             // Subscriber reads the broker's feed over XMPP. Wait until FxcPub has created the node
             // (on the broker's drop-copy logon), then subscribe.
@@ -140,12 +140,12 @@ class PubIntegrationIT {
                 // Drive a fill through the broker (OFX path is proven in Phase 2; here we submit
                 // directly to the OMS). It routes to the exchange, crosses the resting liquidity,
                 // and the resulting fill is drop-copied to FxcPub and published to the feed.
-                broker.omsService().submit("000123456", "PUB-EQ", "ACME",
+                broker.omsService().submit("000123456", "PUB-EQ", "ARVX",
                         Side.BUY, OrderType.LIMIT, new BigDecimal("42.10"), new BigDecimal("100"));
 
                 assertTrue(received.await(15, TimeUnit.SECONDS),
                         "a fill should appear as a status on the broker's feed via XMPP");
-                assertTrue(status.get() != null && status.get().contains("FILLED") && status.get().contains("ACME"),
+                assertTrue(status.get() != null && status.get().contains("FILLED") && status.get().contains("ARVX"),
                         "status should render the fill, got: " + status.get());
             } finally {
                 subscriber.disconnect();

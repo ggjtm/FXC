@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
  */
 class HistogramSamplerTest {
 
-    private static final String SYMBOL = "ACME";
+    private static final String SYMBOL = "ARVX";
     private static final BigDecimal LAST = new BigDecimal("42.10");
 
     private static final BigDecimal P1 = new BigDecimal("41.90");

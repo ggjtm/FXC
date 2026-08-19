@@ -100,8 +100,10 @@ def _add_arguments(parser):
     parser.add_argument("--client-prefix", default=_env("FXC_CLIENT_PREFIX", accounts.DEFAULT_PREFIX),
                         help="client-id prefix for opened accounts; keeps two harness processes from "
                              "claiming each other's accounts")
-    parser.add_argument("--symbols", default=_env("FXC_SYMBOLS", "ACME"),
-                        help="comma-separated symbols to trade")
+    parser.add_argument("--symbols", default=_env("FXC_SYMBOLS", ""),
+                        help="comma-separated symbols to trade; empty (the default) means every "
+                             "listed equity, which keeps the symbol list out of the Salt pillar, "
+                             "the systemd unit and docker-compose")
     parser.add_argument("--strategy", default=_env("FXC_STRATEGY", ""),
                         help="shorthand for a single-type run: rando | booker | bookfish. Empty "
                              "means use the mix below (one of each). Any --mix-* value overrides it.")
@@ -112,10 +114,17 @@ def _add_arguments(parser):
                         help="share of investors running booker")
     parser.add_argument("--mix-bookfish", type=int, default=int(_env("FXC_MIX_BOOKFISH", "0")),
                         help="share of investors running bookfish")
+    parser.add_argument("--wait-min", type=float, default=float(_env("FXC_WAIT_MIN", "1.0")),
+                        help="minimum seconds an investor pauses between orders; the only per-user "
+                             "pacing knob, and the way to cut offered load without dropping users")
+    parser.add_argument("--wait-max", type=float, default=float(_env("FXC_WAIT_MAX", "2.0")),
+                        help="maximum seconds an investor pauses between orders")
     parser.add_argument("--seed", type=int, default=int(_env("FXC_SEED", "1")),
                         help="base RNG seed; each user derives seed+index for reproducibility")
-    parser.add_argument("--seed-price", default=_env("FXC_SEED_PRICE", "42.10"),
-                        help="fallback last-sale used until the book reports one")
+    parser.add_argument("--seed-price", default=_env("FXC_SEED_PRICE", ""),
+                        help="override the fallback last-sale for EVERY symbol; empty (the default) "
+                             "uses each instrument's own reference price, because twenty-five "
+                             "issuers do not share one")
     parser.add_argument("--portfolio-refresh-ms", type=int,
                         default=int(_env("FXC_PORTFOLIO_REFRESH_MS", "5000")),
                         help="how often to re-read cash/positions over OFX; the liquidity-managed "
@@ -191,6 +200,21 @@ def _split(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _symbols(options) -> list[str]:
+    """The universe this run trades: the explicit list, or every listed equity.
+
+    Unknown symbols are refused here rather than at the first tick. The exchange rejects an unlisted
+    symbol asynchronously over FIX, so the OFX reply still says ROUTED — a typo would otherwise
+    produce load that looks accepted and never trades, which is the hardest failure in this system
+    to see.
+    """
+    chosen = _split(options.symbols) or list(instruments.EQUITIES)
+    unknown = [s for s in chosen if s not in instruments.CATALOG]
+    if unknown:
+        raise ValueError(f"unknown symbols {unknown}; listed: {', '.join(instruments.EQUITIES)}")
+    return chosen
+
+
 def _fire(name: str, request_type: str = "ORDER", exception=None) -> None:
     """Emit a synthetic stats row so business outcomes show up in the UI.
 
@@ -224,16 +248,19 @@ class InvestorUser(HttpUser):
     explicit action in the UI, which is the point of using Locust.
     """
 
-    wait_time = between(1.0, 2.0)
+    # Bounds come from --wait-min/--wait-max; locust calls this per user, per task.
+    def wait_time(self):
+        options = self.environment.parsed_options
+        return random.uniform(options.wait_min, options.wait_max)
 
     def on_start(self) -> None:
         options = self.environment.parsed_options
         index = next(_user_index)
 
         fallback_accounts = _split(options.accounts)
-        symbols = _split(options.symbols)
-        if not fallback_accounts or not symbols:
-            raise ValueError("--accounts and --symbols must each name at least one value")
+        symbols = _symbols(options)
+        if not fallback_accounts:
+            raise ValueError("--accounts must name at least one value")
 
         self.slot = None
         self.account = self._claim_account(fallback_accounts, index)
@@ -262,9 +289,11 @@ class InvestorUser(HttpUser):
 
         # Seed a fallback last sale so the first ticks have something to price against; the strategy
         # returns None without one, and rando would otherwise never place an order on a cold market.
-        seed_price = Decimal(options.seed_price)
+        override = Decimal(options.seed_price) if str(options.seed_price).strip() else None
         for symbol in self.symbols:
-            self.market.last_sale.setdefault(symbol, seed_price)
+            seed_price = override if override is not None else instruments.find(symbol).reference_price
+            if seed_price is not None:
+                self.market.last_sale.setdefault(symbol, seed_price)
 
         POPULATION.append(self)
         # Claim a strategy immediately rather than waiting up to a second for the reconciler: a user
@@ -523,7 +552,7 @@ def _poll_market_feed(environment) -> None:
     interval = max(1.0, options.market_feed_refresh_ms / 1000.0)
     failing = False
     while True:
-        for symbol in _split(options.symbols):
+        for symbol in _symbols(options):
             try:
                 histogram = marketfeed.fetch_volume_by_price(
                     base_url, symbol, window_ms=options.market_feed_window_ms
@@ -558,7 +587,8 @@ def _announce(environment, **_kwargs):
         _log(f"no --broker-console-url: investors share {options.accounts}, so the broker console's "
              "per-account P&L blends them")
     _log(
-        f"target={environment.host} accounts={options.accounts} symbols={options.symbols} "
+        f"target={environment.host} accounts={options.accounts} "
+        f"symbols={len(_symbols(options))} listed "
         f"seed={options.seed}"
     )
     try:

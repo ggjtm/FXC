@@ -42,9 +42,9 @@ class GoldenFixtureTest(unittest.TestCase):
 
     def test_equity_order_matches_java(self):
         built = ofx.build_order_request(
-            ACCOUNT, CL_ORD_ID, "ACME", "BUY", "42.10", "10", user=USER, password=PASSWORD
+            ACCOUNT, CL_ORD_ID, "ARVX", "BUY", "42.10", "10", user=USER, password=PASSWORD
         )
-        self.assertEqual(self._golden("ofx-order-acme.xml"), ofx.canonicalize(built))
+        self.assertEqual(self._golden("ofx-order-arvx.xml"), ofx.canonicalize(built))
 
     def test_fx_order_matches_java(self):
         built = ofx.build_order_request(
@@ -83,7 +83,7 @@ class FormattingTest(unittest.TestCase):
         self.assertTrue(stamp.startswith("20260729161500"), stamp)
 
     def test_security_id_branches(self):
-        self.assertEqual(("ACME", "TICKER"), ofx.security_id("ACME"))
+        self.assertEqual(("ARVX", "TICKER"), ofx.security_id("ARVX"))
         self.assertEqual(("FX:EUR/USD", "FXC"), ofx.security_id("EUR/USD"))
 
 
@@ -97,21 +97,21 @@ class EmptyElementTest(unittest.TestCase):
 
     def test_no_request_contains_a_self_closing_element(self):
         built = ofx.build_order_request(
-            ACCOUNT, CL_ORD_ID, "ACME", "BUY", "42.10", "10", user=USER, password=PASSWORD
+            ACCOUNT, CL_ORD_ID, "ARVX", "BUY", "42.10", "10", user=USER, password=PASSWORD
         ).decode(ofx.ENCODING)
         self.assertNotIn("/>", built)
 
     def test_empty_client_order_id_is_refused(self):
         with self.assertRaises(ValueError):
             ofx.build_order_request(
-                ACCOUNT, "", "ACME", "BUY", "42.10", "10", user=USER, password=PASSWORD
+                ACCOUNT, "", "ARVX", "BUY", "42.10", "10", user=USER, password=PASSWORD
             )
 
 
 class RequestShapeTest(unittest.TestCase):
     def test_processing_instruction_is_present_and_well_formed(self):
         built = ofx.build_order_request(
-            ACCOUNT, CL_ORD_ID, "ACME", "BUY", "42.10", "10", user=USER, password=PASSWORD
+            ACCOUNT, CL_ORD_ID, "ARVX", "BUY", "42.10", "10", user=USER, password=PASSWORD
         ).decode(ofx.ENCODING)
         # Exactly one space after <?OFX and no '?' inside the attributes, or the broker's regex
         # misses it and silently falls back to the SGML path.
@@ -121,18 +121,18 @@ class RequestShapeTest(unittest.TestCase):
     def test_limit_order_without_price_is_refused(self):
         with self.assertRaises(ValueError):
             ofx.build_order_request(
-                ACCOUNT, CL_ORD_ID, "ACME", "BUY", None, "10", user=USER, password=PASSWORD
+                ACCOUNT, CL_ORD_ID, "ARVX", "BUY", None, "10", user=USER, password=PASSWORD
             )
 
     def test_bad_side_is_refused(self):
         with self.assertRaises(ValueError):
             ofx.build_order_request(
-                ACCOUNT, CL_ORD_ID, "ACME", "buy", "42.10", "10", user=USER, password=PASSWORD
+                ACCOUNT, CL_ORD_ID, "ARVX", "buy", "42.10", "10", user=USER, password=PASSWORD
             )
 
     def test_order_and_book_share_one_envelope(self):
         built = ofx.build_order_with_book_request(
-            ACCOUNT, CL_ORD_ID, "ACME", "BUY", "42.10", "10", 5, user=USER, password=PASSWORD
+            ACCOUNT, CL_ORD_ID, "ARVX", "BUY", "42.10", "10", 5, user=USER, password=PASSWORD
         ).decode(ofx.ENCODING)
         # Legal: different MessageSetTypes (investment vs investment_security).
         self.assertIn("<FXCORDMSGSRQV1>", built)
@@ -140,11 +140,11 @@ class RequestShapeTest(unittest.TestCase):
         self.assertIn("<DEPTH>5</DEPTH>", built)
 
     def test_book_request_shape(self):
-        built = ofx.build_book_request("BK-1", "ACME", 10, user=USER, password=PASSWORD).decode(
+        built = ofx.build_book_request("BK-1", "ARVX", 10, user=USER, password=PASSWORD).decode(
             ofx.ENCODING
         )
         self.assertIn("<FXCMDMSGSRQV1><FXCMDTRNRQ><TRNUID>BK-1</TRNUID>", built)
-        self.assertIn("<UNIQUEID>ACME</UNIQUEID>", built)
+        self.assertIn("<UNIQUEID>ARVX</UNIQUEID>", built)
 
     def test_escaping(self):
         # Values are escaped for XML text; the broker escapes only & < > on the way out too.
@@ -222,7 +222,7 @@ class ResponseParsingTest(unittest.TestCase):
             _SIGNON_OK,
             "<FXCMDMSGSRSV1><FXCMDTRNRS><TRNUID>BK-1</TRNUID>"
             "<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>"
-            "<FXCMDRS><SECID><UNIQUEID>ACME</UNIQUEID><UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE></SECID>"
+            "<FXCMDRS><SECID><UNIQUEID>ARVX</UNIQUEID><UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE></SECID>"
             "<LASTPRICE>42.1</LASTPRICE>"
             "<FXCBOOKLVL><SIDE>BID</SIDE><PRICE>42.09</PRICE><SIZE>300.0</SIZE></FXCBOOKLVL>"
             "<FXCBOOKLVL><SIDE>OFFER</SIDE><PRICE>42.11</PRICE><SIZE>200.0</SIZE></FXCBOOKLVL>"
@@ -241,7 +241,7 @@ class ResponseParsingTest(unittest.TestCase):
             "<STATUS><CODE>0</CODE><SEVERITY>INFO</SEVERITY></STATUS>"
             "<INVSTMTRS><INVBAL><AVAILCASH>999000.0</AVAILCASH></INVBAL>"
             "<INVPOSLIST>"
-            "<POSSTOCK><INVPOS><SECID><UNIQUEID>ACME</UNIQUEID>"
+            "<POSSTOCK><INVPOS><SECID><UNIQUEID>ARVX</UNIQUEID>"
             "<UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE></SECID><UNITS>1010.0</UNITS></INVPOS></POSSTOCK>"
             "<POSOTHER><INVPOS><SECID><UNIQUEID>FX:EUR</UNIQUEID>"
             "<UNIQUEIDTYPE>FXC</UNIQUEIDTYPE></SECID><UNITS>1000.0</UNITS></INVPOS></POSOTHER>"
@@ -250,7 +250,7 @@ class ResponseParsingTest(unittest.TestCase):
         parsed = ofx.parse_response(reply)
         self.assertEqual(999000.0, parsed.cash["USD"])
         self.assertEqual(1000.0, parsed.cash["EUR"])  # FX: positions are cash, not shares
-        self.assertEqual(1010.0, parsed.shares["ACME"])
+        self.assertEqual(1010.0, parsed.shares["ARVX"])
 
     def test_reply_without_ofx_element_is_a_protocol_error(self):
         with self.assertRaises(ofx.OfxProtocolError):

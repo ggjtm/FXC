@@ -35,7 +35,7 @@ class FeedHttpServerIntegrationTest {
                 null, 0, /* feed http */ 0, /* feed ws */ 0)) {
 
             MatchingEngineService mes = exchange.matchingService();
-            // Two crossing pairs at different prices → two trades on ACME. Each resting sell is fully
+            // Two crossing pairs at different prices → two trades on ARVX. Each resting sell is fully
             // consumed so the next buy crosses the next price level (fills execute at the resting price).
             mes.submit(order("S1", "mm", Side.SELL, "42.00", 100));
             mes.submit(order("B1", "tk", Side.BUY, "42.00", 100));  // trade @42.00 x100, book empty
@@ -47,15 +47,15 @@ class FeedHttpServerIntegrationTest {
 
             // /api/symbols includes the seeded instruments.
             String symbols = get(http, port, "/api/symbols");
-            assertTrue(symbols.contains("\"ACME\""), "symbols should list ACME, got: " + symbols);
+            assertTrue(symbols.contains("\"ARVX\""), "symbols should list ARVX, got: " + symbols);
 
             // /api/candles over a wide window returns a 1-minute candle with the two trades folded in.
             long now = System.currentTimeMillis();
             String candles = get(http, port,
-                    "/api/candles?symbol=ACME&start=" + (now - Granularities.HOUR_MS)
+                    "/api/candles?symbol=ARVX&start=" + (now - Granularities.HOUR_MS)
                             + "&end=" + (now + Granularities.MINUTE_MS) + "&granularity=1m");
 
-            assertTrue(candles.contains("\"symbol\":\"ACME\""), candles);
+            assertTrue(candles.contains("\"symbol\":\"ARVX\""), candles);
             assertTrue(candles.contains("\"granularityMs\":60000"), "1m granularity applied: " + candles);
             assertTrue(candles.contains("\"o\":42.00"), "open should be the first trade price: " + candles);
             assertTrue(candles.contains("\"h\":42.20"), "high across the window: " + candles);
@@ -72,7 +72,7 @@ class FeedHttpServerIntegrationTest {
     }
 
     private static NewOrder order(String id, String broker, Side side, String price, int qty) {
-        return new NewOrder(id, broker, "ACME", side, OrderType.LIMIT, new BigDecimal(price), new BigDecimal(qty));
+        return new NewOrder(id, broker, "ARVX", side, OrderType.LIMIT, new BigDecimal(price), new BigDecimal(qty));
     }
 
     private static String get(HttpClient http, int port, String path) throws Exception {

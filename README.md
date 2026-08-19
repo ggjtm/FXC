@@ -118,7 +118,7 @@ Stories: `FxcExchange/docs/stories/002`, `FxcBroker/docs/stories/002`, `fxc-comm
 ## Demo (end-to-end)
 
 `scripts/demo.sh` brings up MariaDB + Tigase, starts all three backend components in dependency
-order, seeds two investor accounts (cash + ACME shares), runs two autonomous liquidity-managed
+order, seeds two investor accounts (cash + ARVX shares), runs two autonomous liquidity-managed
 `booker` agents, and starts the Locust load harness. Each fill is drop-copied to FxcPub, published to
 the broker's XMPP feed, and consumed back by the investors subscribed to that feed, which folds it into
 the last sale they price against — the whole loop, live.

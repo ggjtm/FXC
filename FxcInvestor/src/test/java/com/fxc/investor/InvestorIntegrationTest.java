@@ -103,7 +103,7 @@ class InvestorIntegrationTest {
                      accounts -> {
                          accounts.seedAccount("000123456", "Dev Investor", "USD",
                                  Map.of("USD", new BigDecimal("1000000")));
-                         accounts.seedShares("000123456", "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+                         accounts.seedShares("000123456", "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
                      },
                      null)) {
 
@@ -113,12 +113,12 @@ class InvestorIntegrationTest {
             OfxBrokerClient ofx = new OfxBrokerClient(
                     "http://127.0.0.1:" + broker.ofxPort() + "/ofx", "investor", "secret", "FXC-BROKER");
             MarketView market = new MarketView();
-            market.setLastSale("ACME", new BigDecimal("42.10"));
+            market.setLastSale("ARVX", new BigDecimal("42.10"));
             InvestorAgent agent = new InvestorAgent("000123456", ofx, Strategies.byName("rando"),
                     market, new Random(42), "INV");
 
             // rando submits an order; with an empty book it rests on the exchange.
-            Optional<SubmittedOrder> submitted = agent.step("ACME", PortfolioView.empty());
+            Optional<SubmittedOrder> submitted = agent.step("ARVX", PortfolioView.empty());
             assertTrue(submitted.isPresent(), "rando should submit an order given a last sale");
             SubmittedOrder order = submitted.get();
             assertTrue(!"REJECTED".equals(order.status()) && !"NO_RESPONSE".equals(order.status()),
@@ -128,7 +128,7 @@ class InvestorIntegrationTest {
             // rando's 1–10). Priced at the rando order's price so it crosses at that level.
             char contra = order.intent().side() == com.fxc.investor.strategy.Side.BUY
                     ? quickfix.field.Side.SELL : quickfix.field.Side.BUY;
-            liquidity.rest(contra, "ACME", order.snappedPrice().toPlainString(), 100);
+            liquidity.rest(contra, "ARVX", order.snappedPrice().toPlainString(), 100);
 
             // Fill is async over FIX; poll the broker's OMS for this order.
             waitUntil(() -> broker.omsService().order(order.clOrdId())

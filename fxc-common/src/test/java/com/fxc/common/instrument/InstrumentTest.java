@@ -28,13 +28,13 @@ class InstrumentTest {
 
     @Test
     void equityUsesTickerAsSymbolAndDvpSettlement() {
-        EquityInstrument acme =
-                EquityInstrument.of("ACME", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
+        EquityInstrument arvx =
+                EquityInstrument.of("ARVX", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
 
-        assertEquals("ACME", acme.symbol());
-        assertEquals(AssetClass.EQUITY, acme.assetClass());
-        assertEquals(SettlementProfile.SettlementStyle.DELIVERY_VERSUS_PAYMENT, acme.settlement().style());
-        assertEquals(1, acme.settlement().settlementLagDays());
+        assertEquals("ARVX", arvx.symbol());
+        assertEquals(AssetClass.EQUITY, arvx.assetClass());
+        assertEquals(SettlementProfile.SettlementStyle.DELIVERY_VERSUS_PAYMENT, arvx.settlement().style());
+        assertEquals(1, arvx.settlement().settlementLagDays());
     }
 
     @Test
@@ -58,6 +58,6 @@ class InstrumentTest {
     @Test
     void positiveIncrementsAreEnforced() {
         assertThrows(IllegalArgumentException.class,
-                () -> EquityInstrument.of("ACME", "Acme Corp", USD, BigDecimal.ZERO, BigDecimal.ONE));
+                () -> EquityInstrument.of("ARVX", "Acme Corp", USD, BigDecimal.ZERO, BigDecimal.ONE));
     }
 }

@@ -47,7 +47,7 @@ class BrokerArchiveIntegrationTest {
                 // Two terminal orders (FILLED + CANCELLED) with executions, plus one live (ROUTED) order
                 // that must NOT be archived.
                 repo.upsertOrder(terminal("CO-1", OrderStatus.FILLED, "10", "42.10"));
-                repo.insertExecution(new Execution("EX-1", "CO-1", "000123456", "ACME", Side.BUY,
+                repo.insertExecution(new Execution("EX-1", "CO-1", "000123456", "ARVX", Side.BUY,
                         new BigDecimal("10"), new BigDecimal("42.10"), new BigDecimal("10"),
                         OrderStatus.FILLED, 1_000L));
                 repo.upsertOrder(terminal("CO-2", OrderStatus.CANCELLED, "5", "41.00"));
@@ -74,7 +74,7 @@ class BrokerArchiveIntegrationTest {
     }
 
     private static ClientOrder terminal(String id, OrderStatus status, String qty, String px) {
-        ClientOrder o = new ClientOrder(id, "000123456", "ACME", Side.BUY, OrderType.LIMIT,
+        ClientOrder o = new ClientOrder(id, "000123456", "ARVX", Side.BUY, OrderType.LIMIT,
                 new BigDecimal(px), new BigDecimal(qty));
         o.applyFill(new BigDecimal(qty), new BigDecimal(px));
         o.setStatus(status);
@@ -83,7 +83,7 @@ class BrokerArchiveIntegrationTest {
     }
 
     private static ClientOrder open(String id) {
-        ClientOrder o = new ClientOrder(id, "000123456", "ACME", Side.BUY, OrderType.LIMIT,
+        ClientOrder o = new ClientOrder(id, "000123456", "ARVX", Side.BUY, OrderType.LIMIT,
                 new BigDecimal("40.00"), new BigDecimal("7"));
         o.setStatus(OrderStatus.ROUTED);
         return o;

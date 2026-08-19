@@ -18,8 +18,8 @@ class TradingSessionTest {
     void opensByDefault() {
         TradingSession session = new TradingSession();
         assertEquals(State.OPEN, session.marketState());
-        assertEquals(State.OPEN, session.state("ACME"));
-        assertFalse(session.isHalted("ACME"));
+        assertEquals(State.OPEN, session.state("ARVX"));
+        assertFalse(session.isHalted("ARVX"));
         assertTrue(session.haltedSymbols().isEmpty());
     }
 
@@ -28,7 +28,7 @@ class TradingSessionTest {
         TradingSession session = new TradingSession();
         session.halt();
         assertEquals(State.HALTED, session.marketState());
-        assertTrue(session.isHalted("ACME"));
+        assertTrue(session.isHalted("ARVX"));
         assertTrue(session.isHalted("EUR/USD"));
         assertTrue(session.isHalted("anything-unlisted"));
     }
@@ -36,44 +36,44 @@ class TradingSessionTest {
     @Test
     void symbolHaltStopsOnlyThatSymbol() {
         TradingSession session = new TradingSession();
-        session.halt("ACME");
-        assertTrue(session.isHalted("ACME"));
-        assertFalse(session.isHalted("GLOBEX"));
+        session.halt("ARVX");
+        assertTrue(session.isHalted("ARVX"));
+        assertFalse(session.isHalted("BLTN"));
         assertEquals(State.OPEN, session.marketState(), "halting a symbol is not a market halt");
-        assertEquals(java.util.Set.of("ACME"), session.haltedSymbols());
+        assertEquals(java.util.Set.of("ARVX"), session.haltedSymbols());
     }
 
     @Test
     void reopeningTheMarketLeavesIndividuallyHaltedSymbolsHalted() {
         TradingSession session = new TradingSession();
-        session.halt("ACME");
+        session.halt("ARVX");
         session.halt();
         session.open();
 
         assertEquals(State.OPEN, session.marketState());
-        assertTrue(session.isHalted("ACME"), "a market resume must not silently resume a halted symbol");
-        assertFalse(session.isHalted("GLOBEX"));
+        assertTrue(session.isHalted("ARVX"), "a market resume must not silently resume a halted symbol");
+        assertFalse(session.isHalted("BLTN"));
 
-        session.open("ACME");
-        assertFalse(session.isHalted("ACME"));
+        session.open("ARVX");
+        assertFalse(session.isHalted("ARVX"));
     }
 
     @Test
     void reopeningASymbolDoesNotDefeatAMarketHalt() {
         TradingSession session = new TradingSession();
         session.halt();
-        session.open("ACME");
-        assertTrue(session.isHalted("ACME"), "the market-wide halt must still win");
+        session.open("ARVX");
+        assertTrue(session.isHalted("ARVX"), "the market-wide halt must still win");
     }
 
     @Test
     void haltAndOpenAreIdempotent() {
         TradingSession session = new TradingSession();
-        session.halt("ACME");
-        session.halt("ACME");
+        session.halt("ARVX");
+        session.halt("ARVX");
         assertEquals(1, session.haltedSymbols().size());
-        session.open("ACME");
-        session.open("ACME");
+        session.open("ARVX");
+        session.open("ARVX");
         assertTrue(session.haltedSymbols().isEmpty());
         session.halt();
         session.halt();
@@ -83,9 +83,9 @@ class TradingSessionTest {
     @Test
     void haltedSymbolsViewIsAnImmutableSnapshot() {
         TradingSession session = new TradingSession();
-        session.halt("ACME");
+        session.halt("ARVX");
         java.util.Set<String> snapshot = session.haltedSymbols();
-        session.halt("GLOBEX");
-        assertEquals(java.util.Set.of("ACME"), snapshot, "snapshot must not track later changes");
+        session.halt("BLTN");
+        assertEquals(java.util.Set.of("ARVX"), snapshot, "snapshot must not track later changes");
     }
 }

@@ -94,7 +94,7 @@ services:
       # exchange booting with the market halted. Set true for an unattended run.
       LOCUST_AUTOSTART: ${FXC_LOADGEN_AUTOSTART:-false}
       FXC_ACCOUNTS: ${FXC_LOADGEN_ACCOUNTS:-000000001,000000002}
-      FXC_SYMBOLS: ${FXC_LOADGEN_SYMBOLS:-ACME}
+      FXC_SYMBOLS: ${FXC_LOADGEN_SYMBOLS:-ARVX}
       # One investor of each type by default (0/0/0 means "one of each" — see fxc_loadgen/mix.py), and
       # all three are steerable in the UI while the run is in progress. Set shares here to start from a
       # different mix, e.g. FXC_LOADGEN_MIX_BOOKER=4 for a booker-heavy run.

@@ -28,9 +28,9 @@ class InvestorStoreIT {
         String account = "IT-" + System.nanoTime();
 
         try (InvestorStore store = InvestorStore.open(URL, USER, PASSWORD)) {
-            store.logDecision(new DecisionRecord(1000L, account, "ACME", "rando",
+            store.logDecision(new DecisionRecord(1000L, account, "ARVX", "rando",
                     null, null, null, null, DecisionRecord.SKIPPED));
-            store.logDecision(new DecisionRecord(2000L, account, "ACME", "booker",
+            store.logDecision(new DecisionRecord(2000L, account, "ARVX", "booker",
                     "BUY", new BigDecimal("5"), new BigDecimal("42.11"), "INV-1", "ROUTED"));
 
             List<DecisionRecord> recent = store.recent(account, 10);

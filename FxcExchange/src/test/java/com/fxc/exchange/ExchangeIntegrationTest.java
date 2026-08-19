@@ -103,18 +103,20 @@ class ExchangeIntegrationTest {
                 SessionID broker1 = new SessionID("FIX.4.4", "BROKER1", "EXCHANGE");
                 SessionID broker2 = new SessionID("FIX.4.4", "BROKER2", "EXCHANGE");
 
-                // BROKER1 subscribes to market data for both instruments.
-                Session.sendToTarget(marketDataRequest("MDR-FX", "EUR/USD"), broker1);
-                Session.sendToTarget(marketDataRequest("MDR-EQ", "ACME"), broker1);
+                // BROKER1 subscribes to market data for both instruments. Both are equities now
+                // that no FX pair is listed (fxc/docs/PROBLEMS.md P23) — the subject here is two
+                // instruments trading and clearing end to end, which is unchanged.
+                Session.sendToTarget(marketDataRequest("MDR-FX", "BLTN"), broker1);
+                Session.sendToTarget(marketDataRequest("MDR-EQ", "ARVX"), broker1);
                 waitUntil(() -> client.snapshots.size() >= 2, 5000);
 
-                // FX: BROKER1 rests a SELL, BROKER2 crosses with a BUY.
-                Session.sendToTarget(limit("FX-S1", Side.SELL, "EUR/USD", "1.08420", 1000), broker1);
-                Session.sendToTarget(limit("FX-B1", Side.BUY, "EUR/USD", "1.08420", 1000), broker2);
+                // Second equity: BROKER1 rests a SELL, BROKER2 crosses with a BUY.
+                Session.sendToTarget(limit("FX-S1", Side.SELL, "BLTN", "9.60", 1000), broker1);
+                Session.sendToTarget(limit("FX-B1", Side.BUY, "BLTN", "9.60", 1000), broker2);
 
                 // Equity: BROKER1 rests a SELL, BROKER2 crosses with a BUY.
-                Session.sendToTarget(limit("EQ-S1", Side.SELL, "ACME", "42.10", 100), broker1);
-                Session.sendToTarget(limit("EQ-B1", Side.BUY, "ACME", "42.10", 100), broker2);
+                Session.sendToTarget(limit("EQ-S1", Side.SELL, "ARVX", "42.10", 100), broker1);
+                Session.sendToTarget(limit("EQ-B1", Side.BUY, "ARVX", "42.10", 100), broker2);
 
                 // Expect: each of the 4 orders acked (NEW) + 2 fills per crossing pair = plenty of reports.
                 waitUntil(() -> filledFor(client, "FX-B1") && filledFor(client, "FX-S1")
@@ -128,16 +130,16 @@ class ExchangeIntegrationTest {
 
                 // --- market data: snapshot on subscribe + incremental carrying the trade ---
                 assertTrue(client.snapshots.size() >= 2, "expected snapshots for both subscriptions");
-                waitUntil(() -> hasTradeIncrement(client, "EUR/USD") && hasTradeIncrement(client, "ACME"), 5000);
-                assertTrue(hasTradeIncrement(client, "EUR/USD"), "expected an FX trade on the incremental feed");
-                assertTrue(hasTradeIncrement(client, "ACME"), "expected an equity trade on the incremental feed");
+                waitUntil(() -> hasTradeIncrement(client, "BLTN") && hasTradeIncrement(client, "ARVX"), 5000);
+                assertTrue(hasTradeIncrement(client, "BLTN"), "expected a BLTN trade on the incremental feed");
+                assertTrue(hasTradeIncrement(client, "ARVX"), "expected an equity trade on the incremental feed");
 
                 // --- clearing: obligations for both asset classes ---
                 List<SettlementObligation> obligations = server.clearingService().runCycle(1);
-                assertTrue(obligations.stream().anyMatch(o -> o.symbol().equals("EUR/USD")
-                                && o.settleStyle().equals("CURRENCY_EXCHANGE")),
-                        "expected an FX currency-exchange obligation");
-                assertTrue(obligations.stream().anyMatch(o -> o.symbol().equals("ACME")
+                assertTrue(obligations.stream().anyMatch(o -> o.symbol().equals("BLTN")
+                                && o.settleStyle().equals("DELIVERY_VERSUS_PAYMENT")),
+                        "expected a BLTN DVP obligation");
+                assertTrue(obligations.stream().anyMatch(o -> o.symbol().equals("ARVX")
                                 && o.settleStyle().equals("DELIVERY_VERSUS_PAYMENT")),
                         "expected an equity DVP obligation");
                 // Two brokers x two symbols = four netted obligations.

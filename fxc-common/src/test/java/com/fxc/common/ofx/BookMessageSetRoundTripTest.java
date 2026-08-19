@@ -31,7 +31,7 @@ class BookMessageSetRoundTripTest {
     @Test
     void bookRequestRoundTrips() throws Exception {
         SecurityId secId = new SecurityId();
-        secId.setUniqueId("ACME");
+        secId.setUniqueId("ARVX");
         secId.setUniqueIdType("TICKER");
 
         FxcBookRequest body = new FxcBookRequest();
@@ -55,14 +55,14 @@ class BookMessageSetRoundTripTest {
                 .filter(s -> s instanceof FxcBookRequestMessageSet).map(s -> (FxcBookRequestMessageSet) s)
                 .findFirst().orElseThrow();
         FxcBookRequest parsedBody = parsedSet.getBookRequest().getMessage();
-        assertEquals("ACME", parsedBody.getSecurityId().getUniqueId());
+        assertEquals("ARVX", parsedBody.getSecurityId().getUniqueId());
         assertEquals(5, parsedBody.getDepth());
     }
 
     @Test
     void bookResponseWithLevelsRoundTrips() throws Exception {
         SecurityId secId = new SecurityId();
-        secId.setUniqueId("ACME");
+        secId.setUniqueId("ARVX");
         secId.setUniqueIdType("TICKER");
 
         FxcBookResponse body = new FxcBookResponse();
@@ -96,7 +96,7 @@ class BookMessageSetRoundTripTest {
                 .findFirst().orElseThrow();
         FxcBookResponse parsedBody = parsedSet.getBookResponse().getMessage();
         assertNotNull(parsedBody);
-        assertEquals("ACME", parsedBody.getSecurityId().getUniqueId());
+        assertEquals("ARVX", parsedBody.getSecurityId().getUniqueId());
         assertEquals(42.10, parsedBody.getLastPrice(), 1e-9);
         assertEquals(3, parsedBody.getLevels().size(), "all three book levels should survive");
         assertEquals("BID", parsedBody.getLevels().get(0).getSide());

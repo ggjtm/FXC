@@ -28,7 +28,7 @@ def _options(**overrides) -> Namespace:
         accounts="000000001,000000002",
         broker_console_url="",
         client_prefix="locust",
-        symbols="ACME",
+        symbols="ARVX",
         strategy="",
         mix_rando=0,
         mix_booker=0,

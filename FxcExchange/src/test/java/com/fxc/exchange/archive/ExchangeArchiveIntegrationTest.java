@@ -78,7 +78,7 @@ class ExchangeArchiveIntegrationTest {
     }
 
     private static NewOrder order(String id, String broker, Side side, String price, int qty) {
-        return new NewOrder(id, broker, "ACME", side, OrderType.LIMIT, new BigDecimal(price), new BigDecimal(qty));
+        return new NewOrder(id, broker, "ARVX", side, OrderType.LIMIT, new BigDecimal(price), new BigDecimal(qty));
     }
 
     private static void cleanArchiveTables(ColdStore cold) throws Exception {

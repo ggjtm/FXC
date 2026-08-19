@@ -23,13 +23,13 @@ class MatchingEngineHaltTest {
 
     private static final Instrument EURUSD =
             FxSpotInstrument.of(EUR, USD, new BigDecimal("0.00001"), new BigDecimal("1000"));
-    private static final Instrument ACME =
-            EquityInstrument.of("ACME", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
+    private static final Instrument ARVX =
+            EquityInstrument.of("ARVX", "Acme Corp", USD, new BigDecimal("0.01"), BigDecimal.ONE);
 
     private static MatchingEngine engine(TradingSession session) {
         MatchingEngine engine = new MatchingEngine(session);
         engine.list(EURUSD);
-        engine.list(ACME);
+        engine.list(ARVX);
         return engine;
     }
 
@@ -51,23 +51,23 @@ class MatchingEngineHaltTest {
         MatchingEngine engine = engine(session);
         session.halt();
 
-        MatchResult result = engine.submit(buy("o1", "brk", "ACME", "42.10", "100"));
+        MatchResult result = engine.submit(buy("o1", "brk", "ARVX", "42.10", "100"));
 
         assertFalse(result.accepted());
         assertEquals(OrderStatus.REJECTED, result.order().status());
         assertTrue(result.rejectReason().contains("trading halted"),
                 "reject reason should say why: " + result.rejectReason());
         assertTrue(result.trades().isEmpty());
-        assertTrue(engine.book("ACME").orElseThrow().bidLevels(5).isEmpty(), "nothing may rest while halted");
+        assertTrue(engine.book("ARVX").orElseThrow().bidLevels(5).isEmpty(), "nothing may rest while halted");
     }
 
     @Test
     void perSymbolHaltRejectsOnlyThatSymbol() {
         TradingSession session = new TradingSession();
         MatchingEngine engine = engine(session);
-        session.halt("ACME");
+        session.halt("ARVX");
 
-        assertFalse(engine.submit(buy("o1", "brk", "ACME", "42.10", "100")).accepted());
+        assertFalse(engine.submit(buy("o1", "brk", "ARVX", "42.10", "100")).accepted());
         assertTrue(engine.submit(buy("o2", "brk", "EUR/USD", "1.08000", "1000")).accepted());
     }
 
@@ -77,10 +77,10 @@ class MatchingEngineHaltTest {
         MatchingEngine engine = engine(session);
 
         session.halt();
-        assertFalse(engine.submit(buy("o1", "brk", "ACME", "42.10", "100")).accepted());
+        assertFalse(engine.submit(buy("o1", "brk", "ARVX", "42.10", "100")).accepted());
 
         session.open();
-        MatchResult after = engine.submit(buy("o2", "brk", "ACME", "42.10", "100"));
+        MatchResult after = engine.submit(buy("o2", "brk", "ARVX", "42.10", "100"));
         assertTrue(after.accepted());
         assertEquals(OrderStatus.NEW, after.order().status());
     }
@@ -105,7 +105,7 @@ class MatchingEngineHaltTest {
         TradingSession session = new TradingSession();
         MatchingEngine engine = engine(session);
         session.halt();
-        engine.submit(buy("o1", "brk", "ACME", "42.10", "100"));
+        engine.submit(buy("o1", "brk", "ARVX", "42.10", "100"));
 
         assertEquals(OrderStatus.REJECTED, engine.order("o1").orElseThrow().status());
     }
@@ -115,7 +115,7 @@ class MatchingEngineHaltTest {
         // Standard market behaviour: a halt stops new orders but must not trap resting ones.
         TradingSession session = new TradingSession();
         MatchingEngine engine = engine(session);
-        engine.submit(buy("o1", "brk", "ACME", "42.10", "100"));
+        engine.submit(buy("o1", "brk", "ARVX", "42.10", "100"));
 
         session.halt();
 
@@ -128,15 +128,15 @@ class MatchingEngineHaltTest {
     @Test
     void clearBookCancelsEveryRestingOrderOnBothSides() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brkA", "ACME", "42.00", "100"));
-        engine.submit(buy("b2", "brkB", "ACME", "41.90", "200"));
-        engine.submit(sell("s1", "brkA", "ACME", "42.50", "150"));
+        engine.submit(buy("b1", "brkA", "ARVX", "42.00", "100"));
+        engine.submit(buy("b2", "brkB", "ARVX", "41.90", "200"));
+        engine.submit(sell("s1", "brkA", "ARVX", "42.50", "150"));
 
-        List<Order> cancelled = engine.clearBook("ACME");
+        List<Order> cancelled = engine.clearBook("ARVX");
 
         assertEquals(3, cancelled.size());
         assertTrue(cancelled.stream().allMatch(o -> o.status() == OrderStatus.CANCELLED));
-        OrderBook book = engine.book("ACME").orElseThrow();
+        OrderBook book = engine.book("ARVX").orElseThrow();
         assertTrue(book.bidLevels(10).isEmpty());
         assertTrue(book.askLevels(10).isEmpty());
         assertTrue(book.bestBid().isEmpty());
@@ -146,10 +146,10 @@ class MatchingEngineHaltTest {
     @Test
     void clearBookReportsOwningBrokersSoOmsStateCanBeReconciled() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brkA", "ACME", "42.00", "100"));
-        engine.submit(sell("s1", "brkB", "ACME", "42.50", "150"));
+        engine.submit(buy("b1", "brkA", "ARVX", "42.00", "100"));
+        engine.submit(sell("s1", "brkB", "ARVX", "42.50", "150"));
 
-        List<Order> cancelled = engine.clearBook("ACME");
+        List<Order> cancelled = engine.clearBook("ARVX");
 
         assertEquals(java.util.Set.of("brkA", "brkB"),
                 cancelled.stream().map(Order::broker).collect(java.util.stream.Collectors.toSet()));
@@ -158,22 +158,22 @@ class MatchingEngineHaltTest {
     @Test
     void clearBookLeavesOtherSymbolsAlone() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brk", "ACME", "42.00", "100"));
+        engine.submit(buy("b1", "brk", "ARVX", "42.00", "100"));
         engine.submit(buy("b2", "brk", "EUR/USD", "1.08000", "1000"));
 
-        engine.clearBook("ACME");
+        engine.clearBook("ARVX");
 
-        assertTrue(engine.book("ACME").orElseThrow().bestBid().isEmpty());
+        assertTrue(engine.book("ARVX").orElseThrow().bestBid().isEmpty());
         assertTrue(engine.book("EUR/USD").orElseThrow().bestBid().isPresent());
     }
 
     @Test
     void clearBookPreservesPartialFillsWhenCancellingTheRemainder() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(sell("s1", "brkA", "ACME", "42.00", "100"));
-        engine.submit(buy("b1", "brkB", "ACME", "42.00", "40")); // partially fills s1
+        engine.submit(sell("s1", "brkA", "ARVX", "42.00", "100"));
+        engine.submit(buy("b1", "brkB", "ARVX", "42.00", "40")); // partially fills s1
 
-        List<Order> cancelled = engine.clearBook("ACME");
+        List<Order> cancelled = engine.clearBook("ARVX");
 
         assertEquals(1, cancelled.size());
         Order remainder = cancelled.get(0);
@@ -186,41 +186,41 @@ class MatchingEngineHaltTest {
     @Test
     void clearBookOnEmptyOrUnknownSymbolIsANoOp() {
         MatchingEngine engine = engine(new TradingSession());
-        assertTrue(engine.clearBook("ACME").isEmpty());
+        assertTrue(engine.clearBook("ARVX").isEmpty());
         assertTrue(engine.clearBook("NOSUCH").isEmpty());
     }
 
     @Test
     void clearAllEmptiesEveryBook() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brk", "ACME", "42.00", "100"));
-        engine.submit(sell("s1", "brk", "ACME", "42.50", "100"));
+        engine.submit(buy("b1", "brk", "ARVX", "42.00", "100"));
+        engine.submit(sell("s1", "brk", "ARVX", "42.50", "100"));
         engine.submit(buy("b2", "brk", "EUR/USD", "1.08000", "1000"));
 
         List<Order> cancelled = engine.clearAll();
 
         assertEquals(3, cancelled.size());
-        assertTrue(engine.book("ACME").orElseThrow().bestBid().isEmpty());
-        assertTrue(engine.book("ACME").orElseThrow().bestAsk().isEmpty());
+        assertTrue(engine.book("ARVX").orElseThrow().bestBid().isEmpty());
+        assertTrue(engine.book("ARVX").orElseThrow().bestAsk().isEmpty());
         assertTrue(engine.book("EUR/USD").orElseThrow().bestBid().isEmpty());
     }
 
     @Test
     void clearedBookAcceptsNewOrdersAgain() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brk", "ACME", "42.00", "100"));
-        engine.clearBook("ACME");
+        engine.submit(buy("b1", "brk", "ARVX", "42.00", "100"));
+        engine.clearBook("ARVX");
 
-        assertTrue(engine.submit(buy("b2", "brk", "ACME", "42.00", "100")).accepted());
+        assertTrue(engine.submit(buy("b2", "brk", "ARVX", "42.00", "100")).accepted());
         assertEquals(0, new BigDecimal("42.00").compareTo(
-                engine.book("ACME").orElseThrow().bestBid().orElseThrow()));
+                engine.book("ARVX").orElseThrow().bestBid().orElseThrow()));
     }
 
     @Test
     void cancelAfterClearBookIsANoOpRatherThanADoubleCancel() {
         MatchingEngine engine = engine(new TradingSession());
-        engine.submit(buy("b1", "brk", "ACME", "42.00", "100"));
-        engine.clearBook("ACME");
+        engine.submit(buy("b1", "brk", "ARVX", "42.00", "100"));
+        engine.clearBook("ARVX");
 
         assertTrue(engine.cancel("b1").isEmpty(), "the order is no longer resting");
     }

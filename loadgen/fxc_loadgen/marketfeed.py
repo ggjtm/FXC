@@ -5,8 +5,8 @@ from fills on the FxcPub XMPP feed and therefore sees the whole market; this har
 client, so it sees only its own OFX responses — sparse enough that ``patience.py`` correctly refuses to
 trade on it. This module closes that gap with the data the exchange already publishes for its chart:
 
-    GET http://<exchange>:8090/api/candles?symbol=ACME&granularity=1m&start=<ms>
-    -> {"symbol":"ACME", ..., "volumeByPrice":[{"price":42.1,"volume":20}, ...]}
+    GET http://<exchange>:8090/api/candles?symbol=ARVX&granularity=1m&start=<ms>
+    -> {"symbol":"ARVX", ..., "volumeByPrice":[{"price":42.1,"volume":20}, ...]}
 
 That array *is* a traded-volume histogram, aggregated across every participant — including the fills
 the Java agents did, which no OFX response would ever have shown this harness.

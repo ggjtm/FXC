@@ -23,7 +23,7 @@ Delivered:
 7. [ ] **ArchiveService** (root Phase 5) — drain terminal orders/executions to `fxc_broker` MariaDB.
 
 **Exit criteria met**: `BrokerIntegrationTest` drives signon → order → fill → statement (position
-shown) against a live FxcExchange with a BROKER2 liquidity client, for both EUR/USD and ACME.
+shown) against a live FxcExchange with a BROKER2 liquidity client, for both EUR/USD and ARVX.
 
 ## Backlog / next
 

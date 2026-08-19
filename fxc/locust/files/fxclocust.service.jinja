@@ -7,21 +7,46 @@ Type=simple
 User={{ common.service_user }}
 Group={{ common.service_group }}
 WorkingDirectory={{ locust.install_dir }}
-Environment=LOCUST_HOST={{ locust.host }}
-Environment=LOCUST_USERS={{ locust.users }}
-Environment=LOCUST_SPAWN_RATE={{ locust.spawn_rate }}
-Environment=LOCUST_AUTOSTART={{ locust.autostart | lower }}
-Environment=FXC_ACCOUNTS={{ locust.accounts }}
-Environment=FXC_SYMBOLS={{ locust.symbols }}
-Environment=FXC_STRATEGY={{ locust.strategy }}
-Environment=FXC_MIX_RANDO={{ locust.mix_rando }}
-Environment=FXC_MIX_BOOKER={{ locust.mix_booker }}
-Environment=FXC_MIX_BOOKFISH={{ locust.mix_bookfish }}
-Environment=FXC_EXCHANGE_URL={{ locust.exchange_url }}
-Environment=FXC_BROKER_CONSOLE_URL={{ locust.broker_console_url }}
-Environment=FXC_CLIENT_PREFIX={{ locust.client_prefix }}
-Environment=FXC_OFX_USER={{ locust.ofx_user }}
-Environment=FXC_OFX_PASSWORD={{ locust.ofx_password }}
+{#- Every value quoted: systemd parses an unquoted Environment= as a whitespace-separated LIST of
+    assignments and silently discards everything after the first token (fxc/docs/PROBLEMS.md P20,
+    which cost a day when it ate 19 of 20 JVM flags). These lines survived only because no value
+    happened to contain a space — an OFX password or a spaced symbol list would have broken them. #}
+Environment="LOCUST_HOST={{ locust.host }}"
+Environment="LOCUST_USERS={{ locust.users }}"
+Environment="LOCUST_SPAWN_RATE={{ locust.spawn_rate }}"
+Environment="LOCUST_AUTOSTART={{ locust.autostart | lower }}"
+Environment="LOCUST_LOGLEVEL={{ locust.log_level }}"
+Environment="FXC_ACCOUNTS={{ locust.accounts }}"
+{#- Empty means "every listed equity" (loadgen/locustfile.py::_symbols), which is what keeps the
+    25-name universe out of this file, the pillar, and docker-compose. #}
+Environment="FXC_SYMBOLS={{ locust.symbols }}"
+Environment="FXC_STRATEGY={{ locust.strategy }}"
+Environment="FXC_MIX_RANDO={{ locust.mix_rando }}"
+Environment="FXC_MIX_BOOKER={{ locust.mix_booker }}"
+Environment="FXC_MIX_BOOKFISH={{ locust.mix_bookfish }}"
+Environment="FXC_EXCHANGE_URL={{ locust.exchange_url }}"
+Environment="FXC_BROKER_CONSOLE_URL={{ locust.broker_console_url }}"
+Environment="FXC_CLIENT_PREFIX={{ locust.client_prefix }}"
+Environment="FXC_OFX_USER={{ locust.ofx_user }}"
+Environment="FXC_OFX_PASSWORD={{ locust.ofx_password }}"
+{#- The rest of the harness's contract. P22's lesson was to mirror the WHOLE thing rather than the
+    subset docker-compose happened to set: the missing OFX creds there cost a full run to an
+    invisible SONRS 15500. #}
+Environment="FXC_SEED={{ locust.seed }}"
+Environment="FXC_SEED_PRICE={{ locust.seed_price }}"
+Environment="FXC_WAIT_MIN={{ locust.wait_min }}"
+Environment="FXC_WAIT_MAX={{ locust.wait_max }}"
+Environment="FXC_PORTFOLIO_REFRESH_MS={{ locust.portfolio_refresh_ms }}"
+Environment="FXC_MARKET_FEED_REFRESH_MS={{ locust.market_feed_refresh_ms }}"
+Environment="FXC_MARKET_FEED_WINDOW_MS={{ locust.market_feed_window_ms }}"
+{#- One keep-alive OFX session per investor, plus the account opener, the feed poller and the web
+    UI's own clients. Debian's 1024 soft default is exceeded around 500 users, and the failure mode
+    is EMFILE mid-ramp reported as request errors — i.e. it looks like the application broke. #}
+LimitNOFILE=65536
+{#- Deliberately single-process: no --processes. AccountRegistry/SlotPool and the shared MarketView
+    are module-globals, so each worker would hand out `locust-0, locust-1, ...` again and investors
+    across workers would collide on the same broker accounts, blending the console's per-account
+    P&L. Multi-process needs --client-prefix keyed on the worker index first. #}
 ExecStart={{ locust.install_dir }}/.venv/bin/locust -f {{ locust.install_dir }}/locustfile.py --web-port {{ locust.web_port }}
 Restart=on-failure
 RestartSec=5

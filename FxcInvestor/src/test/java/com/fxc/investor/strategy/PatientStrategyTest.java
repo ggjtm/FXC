@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
  */
 class PatientStrategyTest {
 
-    private static final String SYMBOL = "ACME";
+    private static final String SYMBOL = "ARVX";
     private static final BigDecimal TICK = new BigDecimal("0.01");
 
     /** A stand-in sampler that always wants the same thing, so the gate is what is under test. */
@@ -170,7 +170,7 @@ class PatientStrategyTest {
 
     @Test
     void marginIsMeasuredInTicks() {
-        // ACME's tick is 0.01, so a 0.05 edge clears 1 tick and 5 ticks, but not 6.
+        // ARVX's tick is 0.01, so a 0.05 edge clears 1 tick and 5 ticks, but not 6.
         MarketView market = ready();
         for (int[] expectation : new int[][] {{1, 1}, {5, 1}, {6, 0}}) {
             PatientStrategy gate = new PatientStrategy(new Fixed(intent(Side.BUY, "42.05")),
@@ -366,10 +366,10 @@ class PatientStrategyTest {
         MarketView market = ready();
         PortfolioView healthy = new PortfolioView(
                 java.util.Map.of("USD", new BigDecimal("1000")),
-                java.util.Map.of("ACME", new BigDecimal("500")));
+                java.util.Map.of("ARVX", new BigDecimal("500")));
         PortfolioView drained = new PortfolioView(
                 java.util.Map.of("USD", new BigDecimal("100")),
-                java.util.Map.of("ACME", new BigDecimal("500")));
+                java.util.Map.of("ARVX", new BigDecimal("500")));
 
         assertTrue(policy.decide(SYMBOL, market, healthy, new Random(1)).isPresent());
 

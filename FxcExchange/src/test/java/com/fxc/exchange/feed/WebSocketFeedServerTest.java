@@ -36,7 +36,7 @@ class WebSocketFeedServerTest {
             CountDownLatch received = new CountDownLatch(1);
             List<String> messages = new CopyOnWriteArrayList<>();
             WebSocket ws = HttpClient.newHttpClient().newWebSocketBuilder()
-                    .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?symbol=ACME"),
+                    .buildAsync(URI.create("ws://127.0.0.1:" + port + "/ws?symbol=ARVX"),
                             new WebSocket.Listener() {
                                 @Override
                                 public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
@@ -55,15 +55,15 @@ class WebSocketFeedServerTest {
             }
             assertEquals(1, server.connectionCount(), "client should be connected");
 
-            // Two ACME trades at different prices in the window, then flush.
-            feed.onEvent(new ExchangeEvent("ACME", List.of(
+            // Two ARVX trades at different prices in the window, then flush.
+            feed.onEvent(new ExchangeEvent("ARVX", List.of(
                     trade("42.00", "3"), trade("42.10", "2")), 1_000_000_000_500L));
             feed.flush();
 
             assertTrue(received.await(10, TimeUnit.SECONDS), "a tick window should arrive over the WS");
             String msg = messages.get(0);
             assertTrue(msg.contains("\"type\":\"tick\""), msg);
-            assertTrue(msg.contains("\"symbol\":\"ACME\""), msg);
+            assertTrue(msg.contains("\"symbol\":\"ARVX\""), msg);
             assertTrue(msg.contains("\"volume\":5"), "summed window volume, got: " + msg);
             assertTrue(msg.contains("\"last\":42.10"), "last sale of the window, got: " + msg);
             assertTrue(msg.contains("\"price\":42.00") && msg.contains("\"price\":42.10"),
@@ -117,7 +117,7 @@ class WebSocketFeedServerTest {
             CountDownLatch received = new CountDownLatch(1);
             List<String> messages = new CopyOnWriteArrayList<>();
             // Filtered to one symbol — a heartbeat is feed-level, not about any instrument.
-            WebSocket ws = connect(server.boundPort(), "ACME", messages, received, null);
+            WebSocket ws = connect(server.boundPort(), "ARVX", messages, received, null);
             awaitConnection(server);
 
             now[0] += 6_000L;
@@ -196,7 +196,7 @@ class WebSocketFeedServerTest {
     }
 
     private static Trade trade(String price, String qty) {
-        return new Trade("T-" + price + "-" + qty, "ACME", new BigDecimal(price), new BigDecimal(qty),
+        return new Trade("T-" + price + "-" + qty, "ARVX", new BigDecimal(price), new BigDecimal(qty),
                 "b", "s", "BROKER1", "BROKER2", Side.BUY, 1);
     }
 }

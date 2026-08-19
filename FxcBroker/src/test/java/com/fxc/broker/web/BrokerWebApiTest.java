@@ -54,7 +54,7 @@ class BrokerWebApiTest {
                      accounts -> {
                          accounts.seedAccount(ACCOUNT, "Dev Investor", "USD",
                                  Map.of("USD", new BigDecimal("1000000")));
-                         accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+                         accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
                      },
                      null, null, 0, 0, true)) {
 
@@ -84,7 +84,7 @@ class BrokerWebApiTest {
             // --- P&L: baseline is cash plus the seeded shares at cost, curve anchored at zero ---
             String pnl = body(client, web, "/api/pnl");
             assertTrue(pnl.contains("\"account\":\"" + ACCOUNT + "\""), pnl);
-            assertTrue(pnl.contains("\"baseline\":1042000.00"), "1,000,000 cash + 1,000 ACME at 42.00: " + pnl);
+            assertTrue(pnl.contains("\"baseline\":1042000.00"), "1,000,000 cash + 1,000 ARVX at 42.00: " + pnl);
             assertTrue(pnl.contains("\"relative\":0.00"), pnl);
             assertTrue(pnl.contains("\"tradeCount\":0"), pnl);
             assertTrue(pnl.contains("\"unpricedHoldings\":0"), pnl);
@@ -99,18 +99,18 @@ class BrokerWebApiTest {
                     "nothing has traded yet, so the ticker is empty rather than fabricated");
 
             exchange.matchingService().submit(new com.fxc.exchange.book.NewOrder(
-                    "seed-s", "BROKER2", "ACME", com.fxc.exchange.book.Side.SELL,
+                    "seed-s", "BROKER2", "ARVX", com.fxc.exchange.book.Side.SELL,
                     com.fxc.exchange.book.OrderType.LIMIT, new BigDecimal("42.50"), new BigDecimal("10")));
             exchange.matchingService().submit(new com.fxc.exchange.book.NewOrder(
-                    "seed-b", "BROKER2", "ACME", com.fxc.exchange.book.Side.BUY,
+                    "seed-b", "BROKER2", "ARVX", com.fxc.exchange.book.Side.BUY,
                     com.fxc.exchange.book.OrderType.LIMIT, new BigDecimal("42.50"), new BigDecimal("10")));
 
-            waitUntil(() -> body(client, web, "/api/lastsale").contains("\"symbol\":\"ACME\""), 8000);
+            waitUntil(() -> body(client, web, "/api/lastsale").contains("\"symbol\":\"ARVX\""), 8000);
             String ticker = body(client, web, "/api/lastsale");
-            assertTrue(ticker.contains("\"symbol\":\"ACME\""), ticker);
+            assertTrue(ticker.contains("\"symbol\":\"ARVX\""), ticker);
             assertTrue(ticker.contains("\"price\":42.5"), ticker);
 
-            // With ACME marked at 42.50 the 1,000 seeded shares revalue: +500 unrealized, no realized.
+            // With ARVX marked at 42.50 the 1,000 seeded shares revalue: +500 unrealized, no realized.
             waitUntil(() -> body(client, web, "/api/pnl").contains("\"relative\":500.00"), 8000);
             String revalued = body(client, web, "/api/pnl");
             assertTrue(revalued.contains("\"relative\":500.00"), revalued);
@@ -121,7 +121,7 @@ class BrokerWebApiTest {
             assertTrue(post(client, web, "/api/trading/stop").contains("\"tradingEnabled\":false"));
             assertTrue(body(client, web, "/api/status").contains("\"tradingEnabled\":false"));
 
-            OrderResult stopped = broker.omsService().submit(ACCOUNT, "WEB-1", "ACME",
+            OrderResult stopped = broker.omsService().submit(ACCOUNT, "WEB-1", "ARVX",
                     Side.BUY, OrderType.LIMIT, new BigDecimal("42.00"), new BigDecimal("1"));
             assertFalse(stopped.accepted(), "a stopped broker must not route orders");
             assertTrue(stopped.reason().contains("trading stopped by operator"),
@@ -130,13 +130,13 @@ class BrokerWebApiTest {
 
             // The exchange itself is unaffected — this is a broker-side gate.
             assertTrue(exchange.matchingService().submit(new com.fxc.exchange.book.NewOrder(
-                    "still-open", "BROKER2", "GLOBEX", com.fxc.exchange.book.Side.BUY,
+                    "still-open", "BROKER2", "BLTN", com.fxc.exchange.book.Side.BUY,
                     com.fxc.exchange.book.OrderType.LIMIT, new BigDecimal("10.00"),
                     new BigDecimal("5"))).accepted());
 
             // --- start trading: orders route again ---
             assertTrue(post(client, web, "/api/trading/start").contains("\"tradingEnabled\":true"));
-            OrderResult resumed = broker.omsService().submit(ACCOUNT, "WEB-2", "ACME",
+            OrderResult resumed = broker.omsService().submit(ACCOUNT, "WEB-2", "ARVX",
                     Side.BUY, OrderType.LIMIT, new BigDecimal("42.00"), new BigDecimal("1"));
             assertTrue(resumed.accepted(), "a resumed broker should route orders again");
 
@@ -184,7 +184,7 @@ class BrokerWebApiTest {
                 accounts -> {
                     accounts.seedAccount("000000001", "Market Maker", "USD",
                             Map.of("USD", new BigDecimal("1000000")));
-                    accounts.seedShares("000000001", "ACME", new BigDecimal("500000"),
+                    accounts.seedShares("000000001", "ARVX", new BigDecimal("500000"),
                             new BigDecimal("42.00"));
                     accounts.seedAccount("000100001", "Investor locust-0", "USD",
                             Map.of("USD", new BigDecimal("1000000")));
@@ -213,8 +213,8 @@ class BrokerWebApiTest {
                 "127.0.0.1", 0, "investor", "secret", "FXC-BROKER",
                 accounts -> {
                     accounts.configureOpening(new com.fxc.broker.account.AccountOpeningPolicy(
-                            true, "USD", new BigDecimal("1000000"), "ACME", new BigDecimal("1000"),
-                            new BigDecimal("42.00"), 100_000L, 9));
+                            true, "USD", new BigDecimal("1000000"), java.util.List.of("ARVX"),
+                            new BigDecimal("1000"), new BigDecimal("42.00"), null, 100_000L, 9));
                     accounts.seedAccount(ACCOUNT, "Dev Investor", "USD",
                             Map.of("USD", new BigDecimal("1000")));
                 },

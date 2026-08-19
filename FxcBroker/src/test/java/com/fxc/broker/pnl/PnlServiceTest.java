@@ -11,9 +11,11 @@ import com.fxc.broker.md.MarketDataCache;
 import com.fxc.broker.model.Side;
 import com.fxc.broker.pnl.PnlService.AccountPnl;
 import com.fxc.common.instrument.Instrument;
+import com.fxc.common.instrument.FxSpotInstrument;
 import com.fxc.common.instrument.InstrumentCatalog;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Currency;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -28,7 +30,7 @@ import org.junit.jupiter.api.io.TempDir;
  */
 class PnlServiceTest {
 
-    private static final Instrument ACME = InstrumentCatalog.bySymbol().get("ACME");
+    private static final Instrument ARVX = InstrumentCatalog.bySymbol().get("ARVX");
     private static final String ACCOUNT = "000123456";
 
     private static void eq(String expected, BigDecimal actual) {
@@ -58,15 +60,15 @@ class PnlServiceTest {
 
     /** Apply a fill exactly as OmsService does: position first, then notify. */
     private static void fill(AccountService accounts, PnlService pnl, Side side, String qty, String px) {
-        accounts.applyFill(ACCOUNT, ACME, side, new BigDecimal(qty), new BigDecimal(px));
-        pnl.onFill(ACCOUNT, ACME, side, new BigDecimal(qty), new BigDecimal(px), 2_000L);
+        accounts.applyFill(ACCOUNT, ARVX, side, new BigDecimal(qty), new BigDecimal(px));
+        pnl.onFill(ACCOUNT, ARVX, side, new BigDecimal(qty), new BigDecimal(px), 2_000L);
     }
 
     @Test
     void baselineStartsFlatAndIsAnchoredAtZeroTrades(@TempDir java.nio.file.Path workDir) throws Exception {
         withServices(workDir, 47581, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("100"), new BigDecimal("42.00"));
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("100"), new BigDecimal("42.00"));
             pnl.captureBaselines();
 
             AccountPnl p = only(pnl, ACCOUNT);
@@ -88,9 +90,9 @@ class PnlServiceTest {
     void buyingAtTheMarkMovesNothing(@TempDir java.nio.file.Path workDir) throws Exception {
         withServices(workDir, 47582, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("100"), new BigDecimal("42.00"));
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("100"), new BigDecimal("42.00"));
             pnl.captureBaselines();
-            md.setLastPrice("ACME", new BigDecimal("42.00"));
+            md.setLastPrice("ARVX", new BigDecimal("42.00"));
 
             fill(accounts, pnl, Side.BUY, "10", "42.00");
 
@@ -107,9 +109,9 @@ class PnlServiceTest {
     void sellingAboveCostRealizesTheGain(@TempDir java.nio.file.Path workDir) throws Exception {
         withServices(workDir, 47583, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("100"), new BigDecimal("42.00"));
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("100"), new BigDecimal("42.00"));
             pnl.captureBaselines();
-            md.setLastPrice("ACME", new BigDecimal("42.00"));
+            md.setLastPrice("ARVX", new BigDecimal("42.00"));
 
             fill(accounts, pnl, Side.SELL, "10", "45.00");
 
@@ -121,7 +123,7 @@ class PnlServiceTest {
             eq("30", p.relative());
             eq("0", p.unrealized());
             eq("42.00000000", accounts.positions(ACCOUNT).stream()
-                    .filter(pos -> pos.instrument().equals("ACME")).findFirst().orElseThrow().avgPrice());
+                    .filter(pos -> pos.instrument().equals("ARVX")).findFirst().orElseThrow().avgPrice());
         });
     }
 
@@ -130,13 +132,13 @@ class PnlServiceTest {
             throws Exception {
         withServices(workDir, 47584, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("100"), new BigDecimal("42.00"));
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("100"), new BigDecimal("42.00"));
             pnl.captureBaselines();
-            md.setLastPrice("ACME", new BigDecimal("42.00"));
+            md.setLastPrice("ARVX", new BigDecimal("42.00"));
             fill(accounts, pnl, Side.SELL, "10", "45.00");
 
             // The remaining 90 shares are revalued from 42.00 to 45.00: +270 unrealized.
-            md.setLastPrice("ACME", new BigDecimal("45.00"));
+            md.setLastPrice("ARVX", new BigDecimal("45.00"));
 
             AccountPnl p = only(pnl, ACCOUNT);
             eq("14500", p.equity());   // 10,450 cash + 90 * 45.00
@@ -152,14 +154,14 @@ class PnlServiceTest {
             throws Exception {
         withServices(workDir, 47585, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("100"), new BigDecimal("42.00"));
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("100"), new BigDecimal("42.00"));
             pnl.captureBaselines();
-            md.setLastPrice("ACME", new BigDecimal("42.00"));
+            md.setLastPrice("ARVX", new BigDecimal("42.00"));
 
             fill(accounts, pnl, Side.BUY, "5", "42.00");
-            md.setLastPrice("ACME", new BigDecimal("43.00"));
+            md.setLastPrice("ARVX", new BigDecimal("43.00"));
             fill(accounts, pnl, Side.SELL, "5", "43.00");
-            md.setLastPrice("ACME", new BigDecimal("41.00"));
+            md.setLastPrice("ARVX", new BigDecimal("41.00"));
             fill(accounts, pnl, Side.BUY, "20", "41.00");
 
             AccountPnl p = only(pnl, ACCOUNT);
@@ -195,7 +197,11 @@ class PnlServiceTest {
     void anFxFillShowsUpThroughRevaluationRatherThanRealized(@TempDir java.nio.file.Path workDir)
             throws Exception {
         withServices(workDir, 47587, (accounts, md, pnl) -> {
-            Instrument eurusd = InstrumentCatalog.bySymbol().get("EUR/USD");
+            // Built here rather than resolved: EUR/USD is no longer LISTED (fxc/docs/PROBLEMS.md
+            // P23), but FX revaluation and FxRates are still live code worth covering. PnlService
+            // takes an Instrument, it never looks one up.
+            Instrument eurusd = FxSpotInstrument.of(Currency.getInstance("EUR"),
+                    Currency.getInstance("USD"), new BigDecimal("0.00001"), new BigDecimal("1000"));
             md.setLastPrice("EUR/USD", new BigDecimal("1.10"));
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("10000")));
             pnl.captureBaselines();
@@ -225,7 +231,7 @@ class PnlServiceTest {
             throws Exception {
         withServices(workDir, 47588, (accounts, md, pnl) -> {
             accounts.seedAccount(ACCOUNT, "Dev", "USD", Map.of("USD", new BigDecimal("1000")));
-            accounts.seedShares(ACCOUNT, "ACME", new BigDecimal("50"), BigDecimal.ZERO);
+            accounts.seedShares(ACCOUNT, "ARVX", new BigDecimal("50"), BigDecimal.ZERO);
             pnl.captureBaselines();
 
             AccountPnl p = only(pnl, ACCOUNT);
@@ -351,7 +357,7 @@ class PnlServiceTest {
             MarketDataCache md = new MarketDataCache();
             for (int i = 1; i <= 6; i++) {
                 accounts.seedAccount("00010000" + i, "Dev", "USD", Map.of("USD", new BigDecimal("1000")));
-                accounts.seedShares("00010000" + i, "ACME", new BigDecimal("100"), new BigDecimal("10.00"));
+                accounts.seedShares("00010000" + i, "ARVX", new BigDecimal("100"), new BigDecimal("10.00"));
             }
             // groupSize = 1: exactly one winner, one most-active and one loser carry a curve.
             PnlService pnl = new PnlService(accounts, md, () -> 1_000L,
@@ -359,10 +365,10 @@ class PnlServiceTest {
             pnl.captureBaselines();
 
             // Account 1 gains (it sold above its cost basis), account 2 loses, account 3 trades most.
-            accounts.applyFill("000100001", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"));
-            pnl.onFill("000100001", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"), 2_000L);
-            accounts.applyFill("000100002", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("1.00"));
-            pnl.onFill("000100002", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("1.00"), 2_000L);
+            accounts.applyFill("000100001", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"));
+            pnl.onFill("000100001", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"), 2_000L);
+            accounts.applyFill("000100002", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("1.00"));
+            pnl.onFill("000100002", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("1.00"), 2_000L);
             for (int i = 0; i < 20; i++) {
                 pnl.onFill("000100003", null, Side.BUY, BigDecimal.ONE, new BigDecimal("1"), 2_000L);
             }
@@ -397,7 +403,7 @@ class PnlServiceTest {
             AccountService accounts = new AccountService(new BrokerRepository(node.ignite()));
             for (int i = 1; i <= 3; i++) {
                 accounts.seedAccount("00010000" + i, "Dev", "USD", Map.of("USD", new BigDecimal("1000")));
-                accounts.seedShares("00010000" + i, "ACME", new BigDecimal("100"), new BigDecimal("10.00"));
+                accounts.seedShares("00010000" + i, "ARVX", new BigDecimal("100"), new BigDecimal("10.00"));
             }
             PnlService pnl = new PnlService(accounts, new MarketDataCache(), () -> 1_000L,
                     new PnlSettings(900_000L, 600, 1, 5_000, PnlService.DEFAULT_INTERNAL_ACCOUNTS_BELOW));
@@ -405,12 +411,12 @@ class PnlServiceTest {
 
             // Account 1 trades once and profits, so the "best" slot is genuinely contested — with a
             // single trader an account would be trivially best and worst at the same time.
-            accounts.applyFill("000100001", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"));
-            pnl.onFill("000100001", ACME, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"), 2_000L);
+            accounts.applyFill("000100001", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"));
+            pnl.onFill("000100001", ARVX, Side.SELL, new BigDecimal("10"), new BigDecimal("20.00"), 2_000L);
             // Account 2 both trades the most and loses the most.
-            accounts.applyFill("000100002", ACME, Side.SELL, new BigDecimal("50"), new BigDecimal("1.00"));
+            accounts.applyFill("000100002", ARVX, Side.SELL, new BigDecimal("50"), new BigDecimal("1.00"));
             for (int i = 0; i < 10; i++) {
-                pnl.onFill("000100002", ACME, Side.SELL, BigDecimal.ONE, new BigDecimal("1.00"), 2_000L);
+                pnl.onFill("000100002", ARVX, Side.SELL, BigDecimal.ONE, new BigDecimal("1.00"), 2_000L);
             }
 
             AccountPnl worst = pnl.series().stream()
@@ -471,7 +477,7 @@ class PnlServiceTest {
             AccountService accounts = new AccountService(new BrokerRepository(node.ignite()));
             for (String internal : List.of("000000000", "000000001", "000000002")) {
                 accounts.seedAccount(internal, "Internal", "USD", Map.of("USD", new BigDecimal("1000")));
-                accounts.seedShares(internal, "ACME", new BigDecimal("500000"), new BigDecimal("42.00"));
+                accounts.seedShares(internal, "ARVX", new BigDecimal("500000"), new BigDecimal("42.00"));
             }
             accounts.seedAccount("000100001", "Investor", "USD", Map.of("USD", new BigDecimal("1000")));
 

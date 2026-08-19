@@ -59,7 +59,7 @@ class PubSubRoundTripIT {
             });
             readerNode.subscribe(reader.getUser().asEntityBareJidString());
 
-            String status = "<status xmlns='" + STATUS_NS + "'>FILLED: BUY 100 ACME @ 42.10</status>";
+            String status = "<status xmlns='" + STATUS_NS + "'>FILLED: BUY 100 ARVX @ 42.10</status>";
             pubNode.publish(new PayloadItem<>("s-1", new SimplePayload("status", STATUS_NS, status)));
 
             assertTrue(received.await(10, TimeUnit.SECONDS),

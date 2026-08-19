@@ -1,6 +1,7 @@
 package com.fxc.investor;
 
 import com.fxc.common.config.FxcConfig;
+import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.investor.account.AccountClient;
 import com.fxc.investor.agent.InvestorAgent;
 import com.fxc.investor.agent.PortfolioCache;
@@ -16,6 +17,7 @@ import com.fxc.investor.strategy.Strategy;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -55,8 +57,12 @@ public final class Main {
         String account = resolveAccount(configuredAccount, clientId, consoleUrl, fallbackAccount);
 
         String strategyName = config.getString("agent.strategy", "rando");
-        String symbol = config.getString("agent.symbol", "ACME");
-        BigDecimal seedLastSale = new BigDecimal(config.getString("agent.seedLastSale", "42.10"));
+        // "*" (the default) = every listed equity, so one resident agent quotes all 25 books rather
+        // than leaving 24 of them without a maker. A comma list still pins a subset.
+        List<String> symbols = InstrumentCatalog.resolveSymbols(config.getString("agent.symbol", "*"));
+        // Blank (the default) = each symbol's own catalog reference price. Twenty-five companies do
+        // not share a price, and pricing off the wrong last-sale puts orders nowhere near the book.
+        String seedLastSaleOverride = config.getString("agent.seedLastSale", "").strip();
         long intervalMs = config.getInt("agent.intervalMs", 1000);
         int ticks = config.getInt("agent.ticks", 10); // 0 = run until interrupted
         long seed = config.getInt("agent.seed", 42);
@@ -69,7 +75,12 @@ public final class Main {
         OfxBrokerClient broker = new OfxBrokerClient(ofxUrl, ofxUser, ofxPassword, brokerId);
         Strategy strategy = Strategies.byName(strategyName);
         MarketView market = new MarketView();
-        market.setLastSale(symbol, seedLastSale); // initial fallback; the live feed updates it below
+        // Initial fallback per symbol; the live feed updates them below.
+        for (String s : symbols) {
+            market.setLastSale(s, seedLastSaleOverride.isBlank()
+                    ? InstrumentCatalog.referencePrice(s).orElseThrow()
+                    : new BigDecimal(seedLastSaleOverride));
+        }
 
         // Live market data from the FxcPub XMPP feed (best-effort — falls back to the seed if the
         // feed is unavailable). Populates last-sale (all agents) and traded volume (bookfish).
@@ -90,7 +101,7 @@ public final class Main {
                         + " at " + xmppHost + ":" + xmppPort);
             } catch (Exception e) {
                 System.out.println("XMPP feed unavailable (" + e.getMessage()
-                        + "); using seeded last-sale " + seedLastSale);
+                        + "); using seeded last-sale from the catalog");
                 if (feed != null) {
                     feed.close();
                     feed = null;
@@ -117,14 +128,15 @@ public final class Main {
 
         // Interactive mode: hand off to the REPL (buy/sell/positions/orders/feed/post/agent/quit).
         if ("repl".equalsIgnoreCase(mode)) {
-            new com.fxc.investor.cli.Repl(broker, market, agent, feed, store, account, symbol,
+            new com.fxc.investor.cli.Repl(broker, market, agent, feed, store, account, symbols.get(0),
                     strategyName, xmppUser, intervalMs,
                     new PortfolioCache(broker::fetchPortfolio, account,
                             config.getInt("agent.portfolioRefreshMs", 5_000))).run();
             return;
         }
 
-        System.out.println("FxcInvestor starting (strategy=" + strategyName + ", symbol=" + symbol
+        System.out.println("FxcInvestor starting (strategy=" + strategyName + ", symbols="
+                + (symbols.size() == 1 ? symbols.get(0) : symbols.size() + " listed")
                 + ", account=" + account + ", agent " + (enabled ? "on" : "off")
                 + ", persistence " + (store != null ? "on" : "off") + ")...");
         if (!enabled) {
@@ -141,6 +153,9 @@ public final class Main {
         boolean refreshBook = config.getBoolean("agent.refreshBook", "booker".equals(strategyName));
         int done = 0;
         while (ticks == 0 || done < ticks) {
+            // Round-robin, not random: this agent is the coverage guarantee, and a random walk over
+            // 25 books at one tick a second leaves individual books unquoted for minutes at a time.
+            String symbol = symbols.get(done % symbols.size());
             if (refreshBook) {
                 // Feed booker's order-book histogram from the broker's snapshot relay (best-effort).
                 try {

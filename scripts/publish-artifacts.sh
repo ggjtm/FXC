@@ -61,7 +61,11 @@ if [ "$SKIP_BUILD" = 0 ]; then
   ./gradlew --no-daemon -q :FxcExchange:distTar :FxcPub:distTar :FxcBroker:distTar :FxcInvestor:distTar
 fi
 
-STAGE="$(mktemp -d)"
+# Stage on the DOCROOT's filesystem, not /tmp. Two reasons: the tarballs are ~180 MB and the
+# master's root fs is small, and — the real one — the final `mv` below is only atomic within a
+# filesystem. With STAGE on / and the docroot on its own volume, every "rename" was a cross-device
+# copy, so a reader could see a half-written tar (fxc/docs/PROBLEMS.md P25).
+STAGE="$(mktemp -d -p "$(dirname "${DOCROOT}")" .publish-XXXXXX)"
 trap 'rm -rf "${STAGE}"' EXIT
 
 for pair in ${COMPONENTS}; do

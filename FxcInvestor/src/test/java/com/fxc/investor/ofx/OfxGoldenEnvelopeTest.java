@@ -41,7 +41,7 @@ class OfxGoldenEnvelopeTest {
 
     /** Both SECID branches: an equity ticker, and an FX pair which gets the {@code FX:} prefix. */
     private static final List<Case> CASES = List.of(
-            new Case("ofx-order-acme.xml", "ACME", Side.BUY, "42.10", "10"),
+            new Case("ofx-order-arvx.xml", "ARVX", Side.BUY, "42.10", "10"),
             new Case("ofx-order-eurusd.xml", "EUR/USD", Side.SELL, "1.08420", "1000"));
 
     private static OfxBrokerClient client() {
@@ -78,28 +78,28 @@ class OfxGoldenEnvelopeTest {
 
     @Test
     void fixturesCarryTheConstraintsThePythonBuilderMustHonour() throws IOException {
-        String acme = Files.readString(SAMPLE_DIR.resolve("ofx-order-acme.xml"), StandardCharsets.UTF_8);
+        String arvx = Files.readString(SAMPLE_DIR.resolve("ofx-order-arvx.xml"), StandardCharsets.UTF_8);
 
         // The <?OFX ?> processing instruction is the v1/v2 discriminator: without it the broker
         // silently takes the untested SGML path.
-        assertTrue(acme.contains("<?OFX OFXHEADER=\"200\" VERSION=\"202\""),
+        assertTrue(arvx.contains("<?OFX OFXHEADER=\"200\" VERSION=\"202\""),
                 "fixture must carry the OFX v2 processing instruction");
         // Root element must be exactly OFX, unprefixed — the parser runs with namespaces disabled.
-        assertTrue(acme.contains("<OFX>") && !acme.contains(":OFX"), "root must be bare <OFX>");
+        assertTrue(arvx.contains("<OFX>") && !arvx.contains(":OFX"), "root must be bare <OFX>");
         // The custom message set and its nesting.
         for (String tag : List.of("SIGNONMSGSRQV1", "SONRQ", "FXCORDMSGSRQV1", "FXCORDTRNRQ",
                 "FXCORDRQ", "ACCTID", "SECID", "UNIQUEID", "UNIQUEIDTYPE", "SIDE", "UNITS",
                 "ORDERTYPE", "LIMITPRICE", "TRNUID")) {
-            assertTrue(acme.contains("<" + tag + ">"), "fixture must contain <" + tag + ">");
+            assertTrue(arvx.contains("<" + tag + ">"), "fixture must contain <" + tag + ">");
         }
         // An empty element is a fatal parse error at the broker (400), so no fixture may contain one.
-        assertTrue(!acme.contains("/>"), "no self-closing/empty elements — they fail to parse");
+        assertTrue(!arvx.contains("/>"), "no self-closing/empty elements — they fail to parse");
 
         String fx = Files.readString(SAMPLE_DIR.resolve("ofx-order-eurusd.xml"), StandardCharsets.UTF_8);
         assertTrue(fx.contains("<UNIQUEID>FX:EUR/USD</UNIQUEID>"), "FX symbols take the FX: prefix");
         assertTrue(fx.contains("<UNIQUEIDTYPE>FXC</UNIQUEIDTYPE>"), "FX SECID uses the FXC id type");
-        assertTrue(acme.contains("<UNIQUEID>ACME</UNIQUEID>")
-                && acme.contains("<UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE>"), "equities use TICKER");
+        assertTrue(arvx.contains("<UNIQUEID>ARVX</UNIQUEID>")
+                && arvx.contains("<UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE>"), "equities use TICKER");
     }
 
     /**

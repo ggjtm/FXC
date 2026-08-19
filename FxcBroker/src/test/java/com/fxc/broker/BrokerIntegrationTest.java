@@ -125,26 +125,28 @@ class BrokerIntegrationTest {
                     "broker (BROKER1) should log on to the exchange");
 
             // Rest contra liquidity so the broker's BUY orders fill.
-            liquidity.restSell("EUR/USD", "1.08420", 1000);
-            liquidity.restSell("ACME", "42.10", 100);
+            liquidity.restSell("BLTN", "9.60", 1000);
+            liquidity.restSell("ARVX", "42.10", 100);
             Thread.sleep(300); // let the resting orders settle in the book
 
             String ofxUrl = "http://127.0.0.1:" + broker.ofxPort() + "/ofx";
 
-            // --- Order 1: BUY EUR/USD (FX) ---
+            // --- Order 1: BUY BLTN. This was an FX order until EUR/USD was de-listed
+            // (fxc/docs/PROBLEMS.md P23); the leg is kept as a second equity so the test still
+            // proves two concurrent OFX orders both route, fill and land on the statement. ---
             ResponseEnvelope fxOrderResp = post(ofxUrl, orderRequest(
-                    "ORD-FX", "000123456", fxSecId("EUR/USD"), "BUY", 1000.0, "LIMIT", 1.08420));
+                    "ORD-FX", "000123456", tickerSecId("BLTN"), "BUY", 1000.0, "LIMIT", 9.60));
             assertNotNull(fxOrderResp.getSignonResponse());
 
-            // --- Order 2: BUY ACME (equity) ---
+            // --- Order 2: BUY ARVX (equity) ---
             post(ofxUrl, orderRequest(
-                    "ORD-EQ", "000123456", tickerSecId("ACME"), "BUY", 100.0, "LIMIT", 42.10));
+                    "ORD-EQ", "000123456", tickerSecId("ARVX"), "BUY", 100.0, "LIMIT", 42.10));
 
             // --- Poll the statement until both positions appear (fills are async over FIX) ---
             waitUntil(() -> {
                 try {
                     InvestmentStatementResponse stmt = statement(post(ofxUrl, statementRequest("000123456")));
-                    return stmt != null && hasPosition(stmt, "FX:EUR") && hasPosition(stmt, "ACME");
+                    return stmt != null && hasPosition(stmt, "BLTN") && hasPosition(stmt, "ARVX");
                 } catch (Exception e) {
                     return false;
                 }
@@ -153,10 +155,10 @@ class BrokerIntegrationTest {
             InvestmentStatementResponse stmt =
                     statement(post(ofxUrl, statementRequest("000123456")));
             assertNotNull(stmt, "statement response");
-            assertTrue(hasPosition(stmt, "FX:EUR"),
-                    "FX position (EUR balance from buying EUR/USD) should show on the statement");
-            assertTrue(hasPosition(stmt, "ACME"),
-                    "equity position (ACME shares) should show on the statement");
+            assertTrue(hasPosition(stmt, "BLTN"),
+                    "BLTN shares should show on the statement");
+            assertTrue(hasPosition(stmt, "ARVX"),
+                    "equity position (ARVX shares) should show on the statement");
         }
     }
 
@@ -224,13 +226,6 @@ class BrokerIntegrationTest {
         TreeSet<RequestMessageSet> sets = new TreeSet<>();
         sets.add(set);
         return withSignon(env, sets);
-    }
-
-    private static SecurityId fxSecId(String pair) {
-        SecurityId id = new SecurityId();
-        id.setUniqueId("FX:" + pair);
-        id.setUniqueIdType("FXC");
-        return id;
     }
 
     private static SecurityId tickerSecId(String ticker) {

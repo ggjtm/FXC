@@ -7,6 +7,6 @@ package com.fxc.broker.model;
 public enum HoldingType {
     /** A cash balance; the position's instrument key is a currency code (e.g. "USD"). */
     CASH,
-    /** A share position; the position's instrument key is an equity symbol (e.g. "ACME"). */
+    /** A share position; the position's instrument key is an equity symbol (e.g. "ARVX"). */
     SHARE
 }

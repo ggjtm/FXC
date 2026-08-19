@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 /** Acceptance tests for the {@code rando} agent (docs/stories/001-rando-agent.md). */
 class RandoStrategyTest {
 
-    private static final String SYMBOL = "ACME";
+    private static final String SYMBOL = "ARVX";
     private static final BigDecimal LAST = new BigDecimal("42.10");
     private static final BigDecimal LOW = new BigDecimal("41.679");   // 42.10 * 0.99
     private static final BigDecimal HIGH = new BigDecimal("42.521");  // 42.10 * 1.01

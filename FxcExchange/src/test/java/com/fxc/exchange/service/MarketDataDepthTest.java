@@ -52,9 +52,9 @@ class MarketDataDepthTest {
         InstrumentCatalog.defaults().forEach(engine::list);
         // Six resting bids and six asks at distinct prices so depth tiers differ.
         for (int i = 0; i < 6; i++) {
-            engine.submit(new NewOrder("B" + i, "mm", "ACME", Side.BUY, OrderType.LIMIT,
+            engine.submit(new NewOrder("B" + i, "mm", "ARVX", Side.BUY, OrderType.LIMIT,
                     new BigDecimal("41." + (90 - i)), new BigDecimal("10")));
-            engine.submit(new NewOrder("A" + i, "mm", "ACME", Side.SELL, OrderType.LIMIT,
+            engine.submit(new NewOrder("A" + i, "mm", "ARVX", Side.SELL, OrderType.LIMIT,
                     new BigDecimal("42." + (10 + i)), new BigDecimal("10")));
         }
         return engine;
@@ -64,7 +64,7 @@ class MarketDataDepthTest {
     void topOfBookReturnsOneLevelPerSide() {
         CapturingPublisher pub = new CapturingPublisher();
         MarketDataService md = new MarketDataService(engineWithBook(), pub);
-        md.subscribe("t", "req", List.of("ACME"), MarketDataService.TOP_OF_BOOK);
+        md.subscribe("t", "req", List.of("ARVX"), MarketDataService.TOP_OF_BOOK);
         assertEquals(1, pub.bids.size(), "top-of-book: one bid");
         assertEquals(1, pub.asks.size(), "top-of-book: one ask");
     }
@@ -73,7 +73,7 @@ class MarketDataDepthTest {
     void marketDepthReturnsFiveLevelsPerSide() {
         CapturingPublisher pub = new CapturingPublisher();
         MarketDataService md = new MarketDataService(engineWithBook(), pub);
-        md.subscribe("t", "req", List.of("ACME"), MarketDataService.MARKET_DEPTH);
+        md.subscribe("t", "req", List.of("ARVX"), MarketDataService.MARKET_DEPTH);
         assertEquals(5, pub.bids.size(), "market-depth: five bids");
         assertEquals(5, pub.asks.size(), "market-depth: five asks");
     }
@@ -82,7 +82,7 @@ class MarketDataDepthTest {
     void fullDepthReturnsAllLevels() {
         CapturingPublisher pub = new CapturingPublisher();
         MarketDataService md = new MarketDataService(engineWithBook(), pub);
-        md.subscribe("t", "req", List.of("ACME"), MarketDataService.FULL_DEPTH);
+        md.subscribe("t", "req", List.of("ARVX"), MarketDataService.FULL_DEPTH);
         assertEquals(6, pub.bids.size(), "full-depth: all six bids");
         assertEquals(6, pub.asks.size(), "full-depth: all six asks");
     }
@@ -92,13 +92,13 @@ class MarketDataDepthTest {
         MatchingEngine engine = engineWithBook();
         CapturingPublisher pub = new CapturingPublisher();
         MarketDataService md = new MarketDataService(engine, pub);
-        md.subscribe("t", "req", List.of("ACME"), MarketDataService.TOP_OF_BOOK);
+        md.subscribe("t", "req", List.of("ARVX"), MarketDataService.TOP_OF_BOOK);
         assertNull(pub.lastSale, "no last sale before any trade");
 
         // A crossing buy lifts the best offer (42.10) -> a trade; feed the event to the MD service.
-        var result = engine.submit(new NewOrder("X", "tk", "ACME", Side.BUY, OrderType.LIMIT,
+        var result = engine.submit(new NewOrder("X", "tk", "ARVX", Side.BUY, OrderType.LIMIT,
                 new BigDecimal("42.10"), new BigDecimal("4")));
-        md.onEvent(new ExchangeEvent("ACME", result.trades(), 1_000L));
+        md.onEvent(new ExchangeEvent("ARVX", result.trades(), 1_000L));
 
         assertTrue(pub.lastSale != null, "snapshot should now carry the last sale");
         assertEquals(new BigDecimal("42.10"), pub.lastSale.price(), "last sale price");

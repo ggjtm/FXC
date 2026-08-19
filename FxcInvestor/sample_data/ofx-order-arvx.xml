@@ -17,7 +17,7 @@
       <FXCORDRQ>
         <ACCTID>000123456</ACCTID>
         <SECID>
-          <UNIQUEID>ACME</UNIQUEID>
+          <UNIQUEID>ARVX</UNIQUEID>
           <UNIQUEIDTYPE>TICKER</UNIQUEIDTYPE>
         </SECID>
         <SIDE>BUY</SIDE>

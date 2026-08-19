@@ -5,10 +5,12 @@ import com.fxc.broker.oms.FixSettingsFactory;
 import com.fxc.broker.pnl.PnlService;
 import com.fxc.broker.pnl.PnlSettings;
 import com.fxc.common.config.FxcConfig;
+import com.fxc.common.instrument.InstrumentCatalog;
 import com.fxc.common.store.ColdStore;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
@@ -52,8 +54,13 @@ public final class Main {
         String devAccount = config.getString("account.dev", "000123456");
         String devAccount2 = config.getString("account.dev2", "000654321");
         BigDecimal devCash = new BigDecimal(config.getString("account.seedCash", "1000000"));
-        String seedSymbol = config.getString("account.seedSymbol", "ACME");
-        BigDecimal seedSharePrice = new BigDecimal(config.getString("account.seedSharePrice", "42.00"));
+        // "*" (the default) = every listed equity, so the 25-name list never has to appear in a
+        // conf file or a Salt pillar. A comma-separated list still pins a subset for a narrower demo.
+        List<String> seedSymbols = InstrumentCatalog.resolveSymbols(
+                config.getString("account.seedSymbol", "*"));
+        // Blank (the default) = each symbol's own catalog reference price. A single scalar would mark
+        // twenty-five different companies at one price, which is what made every book look identical.
+        String seedPriceOverride = config.getString("account.seedSharePrice", "").strip();
         // The tradable float, created ONCE by an issuer and placed with the market makers, rather than
         // conjured per account (docs/PROBLEMS.md P19). The issuer is what makes the total a number
         // somebody chose instead of a by-product of how many accounts happen to exist.
@@ -70,11 +77,26 @@ public final class Main {
         // Not defaulted to the market makers' balance: an investor is retail-sized next to a desk
         // holding the float, and inheriting devCash silently made them equals.
         BigDecimal openCash = new BigDecimal(config.getString("account.open.seedCash", "100000"));
-        BigDecimal openShares = new BigDecimal(config.getString("account.open.seedShares", "0"));
+        BigDecimal openShares = new BigDecimal(config.getString("account.open.seedShares", "20"));
+        List<String> openSymbols = InstrumentCatalog.resolveSymbols(
+                config.getString("account.open.seedSymbol", "*"));
+        // Opened accounts draw their shares FROM the issuer's reserve rather than minting them, so
+        // the float stays a number somebody chose no matter how many investors spawn.
+        String openFrom = config.getString("account.open.seedFrom", issuerAccount);
         AccountOpeningPolicy openingPolicy = new AccountOpeningPolicy(accountsEnabled, "USD", openCash,
-                seedSymbol, openShares, seedSharePrice,
+                openSymbols, openShares,
+                seedPriceOverride.isBlank() ? null : new BigDecimal(seedPriceOverride), openFrom,
                 Long.parseLong(config.getString("account.open.first", "100000")),
                 config.getInt("account.open.numberWidth", 9));
+
+        // Fail before BrokerServer.start opens a listener: with 25 symbols an over-allocation now
+        // dies on symbol 4 of 25, leaving a half-seeded market behind a live port.
+        BigDecimal reservePerSymbol = issuedShares.subtract(makerShares.multiply(BigDecimal.valueOf(2)));
+        if (reservePerSymbol.signum() < 0) {
+            throw new IllegalStateException("account.mm.shares (" + makerShares.toPlainString()
+                    + " x2) exceeds account.issue.shares (" + issuedShares.toPlainString()
+                    + ") per symbol; the float cannot be over-allocated");
+        }
 
         // Rolling P&L window for the console (docs/stories/003).
         PnlSettings pnlSettings = new PnlSettings(
@@ -113,17 +135,26 @@ public final class Main {
                 ofxHost, ofxPort, ofxUser, ofxPassword, brokerId,
                 accounts -> {
                     accounts.configureOpening(openingPolicy);
-                    // 1. The issuer creates the float. Shares exist here and nowhere else.
+                    String[] makers = {devAccount, devAccount2};
+                    // Accounts first, OUTSIDE the symbol loop: seedAccount re-writes the USD cash
+                    // position, so calling it per symbol would reset each maker's cash 25 times.
                     accounts.seedAccount(issuerAccount, "FXC Issuer", "USD", Map.of());
-                    accounts.seedShares(issuerAccount, seedSymbol, issuedShares, seedSharePrice);
-                    // 2. It places that float with the market makers, who are the demo's initial
-                    //    liquidity: they hold the inventory investors buy from and the cash to buy it
-                    //    back. A transfer, not a second seeding — the total stays exactly what was
-                    //    issued.
-                    for (String acct : new String[] {devAccount, devAccount2}) {
+                    for (String acct : makers) {
                         accounts.seedAccount(acct, "Market Maker " + acct, "USD",
                                 Map.of("USD", devCash));
-                        accounts.transferShares(issuerAccount, acct, seedSymbol, makerShares);
+                    }
+                    // 1. The issuer creates the float, once per listed symbol. Shares exist here and
+                    //    nowhere else. 2. It places most of that float with the market makers — a
+                    //    transfer, not a second seeding — and keeps the remainder as the reserve
+                    //    opened accounts draw from. Per symbol the total stays exactly what was issued.
+                    for (String symbol : seedSymbols) {
+                        BigDecimal basis = seedPriceOverride.isBlank()
+                                ? InstrumentCatalog.referencePrice(symbol).orElseThrow()
+                                : new BigDecimal(seedPriceOverride);
+                        accounts.seedShares(issuerAccount, symbol, issuedShares, basis);
+                        for (String acct : makers) {
+                            accounts.transferShares(issuerAccount, acct, symbol, makerShares);
+                        }
                     }
                 },
                 dropCopyEnabled
@@ -139,8 +170,10 @@ public final class Main {
             shutdown.countDown();
         }));
         System.out.println("FxcBroker started. OFX on port " + server.ofxPort()
-                + ", " + issuedShares.toPlainString() + " " + seedSymbol + " issued by "
-                + issuerAccount + " to market makers " + devAccount + "/" + devAccount2 + "."
+                + ", " + seedSymbols.size() + " symbols x " + issuedShares.toPlainString()
+                + " shares issued by " + issuerAccount + " (" + makerShares.toPlainString()
+                + " each to " + devAccount + "/" + devAccount2 + ", "
+                + reservePerSymbol.toPlainString() + " reserved per symbol)."
                 + (webEnabled ? " Console: http://localhost:" + server.webServer().boundPort() + "/" : "")
                 + " Ctrl-C to stop.");
         shutdown.await();

@@ -18,8 +18,11 @@
         'agent_client_id': 'investor-1',
         'agent_enabled': true,
         'agent_strategy': 'booker',
-        'agent_symbol': 'ACME',
-        'agent_seed_last_sale': '42.10',
+        {#- '*' = every listed equity, round-robin. One resident agent quoting all 25 books is what
+            gives the other 24 a maker; pin a single symbol only for a focused demo. #}
+        'agent_symbol': '*',
+        {#- Blank = each symbol's own catalog reference price. #}
+        'agent_seed_last_sale': '',
         'agent_interval_ms': 1500,
         'agent_ticks': 0,
         'agent_seed': 7,

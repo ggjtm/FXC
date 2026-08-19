@@ -117,9 +117,9 @@ class HistogramSampleTest(unittest.TestCase):
 class BookerStrategyTest(unittest.TestCase):
     def _market(self) -> strategies.MarketView:
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         market.set_book(
-            "ACME",
+            "ARVX",
             _book(
                 ("BID", "42.09", "300"),
                 ("BID", "42.08", "500"),
@@ -131,51 +131,51 @@ class BookerStrategyTest(unittest.TestCase):
 
     def test_returns_none_without_a_last_sale(self):
         market = strategies.MarketView()
-        market.set_book("ACME", _book(("BID", "42.09", "300")))
+        market.set_book("ARVX", _book(("BID", "42.09", "300")))
         self.assertIsNone(
-            strategies.BookerStrategy().decide("ACME", market, None, random.Random(1))
+            strategies.BookerStrategy().decide("ARVX", market, None, random.Random(1))
         )
 
     def test_draws_from_book_prices(self):
         strategy = strategies.BookerStrategy()
         market = self._market()
         book_prices = {Decimal("42.09"), Decimal("42.08"), Decimal("42.11"), Decimal("42.12")}
-        drawn = {strategy.decide("ACME", market, None, random.Random(s)).price for s in range(100)}
+        drawn = {strategy.decide("ARVX", market, None, random.Random(s)).price for s in range(100)}
         self.assertTrue(drawn.issubset(book_prices), f"unexpected prices: {drawn - book_prices}")
 
     def test_both_sides_of_the_book_feed_one_histogram(self):
         # The Java version merges bid and offer quantities into a single histogram.
         strategy = strategies.BookerStrategy()
         market = self._market()
-        drawn = {strategy.decide("ACME", market, None, random.Random(s)).price for s in range(200)}
+        drawn = {strategy.decide("ARVX", market, None, random.Random(s)).price for s in range(200)}
         self.assertTrue(any(p < Decimal("42.10") for p in drawn), "should reach bid side")
         self.assertTrue(any(p > Decimal("42.10") for p in drawn), "should reach offer side")
 
     def test_quantities_at_a_shared_price_are_summed(self):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         # Same price on both sides — pathological but the merge must not lose a level.
-        market.set_book("ACME", _book(("BID", "42.10", "100"), ("OFFER", "42.10", "100"),
+        market.set_book("ARVX", _book(("BID", "42.10", "100"), ("OFFER", "42.10", "100"),
                                       ("OFFER", "42.20", "1")))
         strategy = strategies.BookerStrategy()
-        drawn = {strategy.decide("ACME", market, None, random.Random(s)).price for s in range(100)}
+        drawn = {strategy.decide("ARVX", market, None, random.Random(s)).price for s in range(100)}
         # 42.10 carries 200 of 201 weight, so it must dominate.
         self.assertIn(Decimal("42.10"), drawn)
 
     def test_empty_book_falls_back_to_a_rando_like_draw(self):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         strategy = strategies.BookerStrategy()
         for seed in range(50):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
 
     def test_prices_are_tick_snapped_even_on_the_fallback_path(self):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         strategy = strategies.BookerStrategy()
         for seed in range(50):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             self.assertEqual(Decimal(0), intent.price % Decimal("0.01"), intent.price)
 
     def test_side_and_quantity_bounds_are_shared_with_rando(self):
@@ -183,7 +183,7 @@ class BookerStrategyTest(unittest.TestCase):
         market = self._market()
         sides, quantities = set(), set()
         for seed in range(200):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             sides.add(intent.side)
             quantities.add(int(intent.quantity))
         self.assertEqual({"BUY", "SELL"}, sides)
@@ -198,7 +198,7 @@ class BookerStrategyTest(unittest.TestCase):
 
         def run():
             rng = random.Random(42)
-            return [strategy.decide("ACME", market, None, rng) for _ in range(20)]
+            return [strategy.decide("ARVX", market, None, rng) for _ in range(20)]
 
         self.assertEqual(run(), run())
 
@@ -207,14 +207,14 @@ class BookfishStrategyTest(unittest.TestCase):
     def _market(self) -> strategies.MarketView:
         market = strategies.MarketView()
         for price, qty in (("42.05", "10"), ("42.10", "50"), ("42.15", "30")):
-            market.record_trade("ACME", Decimal(price), Decimal(qty))
-        market.set_last_sale("ACME", Decimal("42.10"))
+            market.record_trade("ARVX", Decimal(price), Decimal(qty))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         return market
 
     def test_returns_none_without_a_last_sale(self):
         self.assertIsNone(
             strategies.BookfishStrategy().decide(
-                "ACME", strategies.MarketView(), None, random.Random(1)
+                "ARVX", strategies.MarketView(), None, random.Random(1)
             )
         )
 
@@ -222,7 +222,7 @@ class BookfishStrategyTest(unittest.TestCase):
         strategy = strategies.BookfishStrategy()
         market = self._market()
         traded = {Decimal("42.05"), Decimal("42.10"), Decimal("42.15")}
-        drawn = {strategy.decide("ACME", market, None, random.Random(s)).price for s in range(100)}
+        drawn = {strategy.decide("ARVX", market, None, random.Random(s)).price for s in range(100)}
         self.assertTrue(drawn.issubset(traded), f"unexpected: {drawn - traded}")
 
     def test_sigma_is_tighter_than_booker(self):
@@ -236,23 +236,23 @@ class BookfishStrategyTest(unittest.TestCase):
         # The documented consequence of having no XMPP feed: until trades are observed, the
         # histogram is empty and every draw takes the ±1% fallback.
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         strategy = strategies.BookfishStrategy()
         for seed in range(50):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
 
     def test_accumulates_its_own_observations(self):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         strategy = strategies.BookfishStrategy()
         # Before observing anything: fallback territory.
         self.assertEqual({}, market.traded_volume)
         # After observing two prices the histogram can support a draw.
-        market.record_trade("ACME", Decimal("42.00"), Decimal("10"))
-        market.record_trade("ACME", Decimal("42.20"), Decimal("10"))
-        market.set_last_sale("ACME", Decimal("42.10"))
-        drawn = {strategy.decide("ACME", market, None, random.Random(s)).price for s in range(100)}
+        market.record_trade("ARVX", Decimal("42.00"), Decimal("10"))
+        market.record_trade("ARVX", Decimal("42.20"), Decimal("10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
+        drawn = {strategy.decide("ARVX", market, None, random.Random(s)).price for s in range(100)}
         self.assertTrue(drawn & {Decimal("42.00"), Decimal("42.20")}, drawn)
 
     def test_reproducible(self):
@@ -261,7 +261,7 @@ class BookfishStrategyTest(unittest.TestCase):
 
         def run():
             rng = random.Random(3)
-            return [strategy.decide("ACME", market, None, rng) for _ in range(20)]
+            return [strategy.decide("ARVX", market, None, rng) for _ in range(20)]
 
         self.assertEqual(run(), run())
 

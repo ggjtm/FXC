@@ -120,7 +120,7 @@ runtime, isolated in a container, never invoked from the host" — so the host t
   password was caught despite HTTP 200; book snapshots parsed with real depth.
 - **Continuous run (the acceptance test)**: 3.5 minutes, **2,168 fills, 0 rejections**, both accounts
   trading (~1,000 decisions each), equity *mean-reverting* around the seeded 1,042,000 (+655 → +262)
-  rather than draining. A naive one-sided flow would have exhausted 1,000 ACME or $1M and degraded into
+  rather than draining. A naive one-sided flow would have exhausted 1,000 ARVX or $1M and degraded into
   a reject stream.
 
 ## Out of scope / later

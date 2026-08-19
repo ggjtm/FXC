@@ -21,7 +21,7 @@ class PortfolioCacheTest {
 
     private static PortfolioView view(String cash, String shares) {
         return new PortfolioView(
-                Map.of("USD", new BigDecimal(cash)), Map.of("ACME", new BigDecimal(shares)));
+                Map.of("USD", new BigDecimal(cash)), Map.of("ARVX", new BigDecimal(shares)));
     }
 
     /** A source that counts calls and can be told to fail. */
@@ -53,7 +53,7 @@ class PortfolioCacheTest {
         assertEquals(1, source.calls);
         assertTrue(cache.hasData());
         assertEquals(new BigDecimal("1000000"), first.cash("USD"));
-        assertEquals(new BigDecimal("1000"), first.shares("ACME"));
+        assertEquals(new BigDecimal("1000"), first.shares("ARVX"));
     }
 
     @Test
@@ -97,10 +97,10 @@ class PortfolioCacheTest {
         long[] now = {1_000L};
         PortfolioCache cache = new PortfolioCache(source, "A", 1_000, () -> now[0]);
 
-        assertEquals(new BigDecimal("1000"), cache.current().shares("ACME"));
+        assertEquals(new BigDecimal("1000"), cache.current().shares("ARVX"));
         source.next = view("958000", "1010");
         now[0] += 1_000;
-        assertEquals(new BigDecimal("1010"), cache.current().shares("ACME"));
+        assertEquals(new BigDecimal("1010"), cache.current().shares("ARVX"));
         assertEquals(new BigDecimal("958000"), cache.current().cash("USD"));
     }
 
@@ -111,14 +111,14 @@ class PortfolioCacheTest {
         PortfolioCache cache = new PortfolioCache(source, "A", 1_000, () -> now[0]);
 
         PortfolioView good = cache.current();
-        assertEquals(new BigDecimal("1000"), good.shares("ACME"));
+        assertEquals(new BigDecimal("1000"), good.shares("ARVX"));
 
         source.fail = true;
         now[0] += 1_000;
         PortfolioView afterFailure = cache.current();
 
         // Stale but usable — a decision loop must not die because a statement read failed.
-        assertEquals(new BigDecimal("1000"), afterFailure.shares("ACME"));
+        assertEquals(new BigDecimal("1000"), afterFailure.shares("ARVX"));
         assertEquals(1, cache.failureCount());
         assertTrue(cache.hasData());
     }
@@ -148,7 +148,7 @@ class PortfolioCacheTest {
         PortfolioView view = cache.current();
         assertTrue(view.isEmpty(), "no data yet — a liquidity-managed strategy must decline, not guess");
         assertEquals(BigDecimal.ZERO, view.cash("USD"));
-        assertEquals(BigDecimal.ZERO, view.shares("ACME"));
+        assertEquals(BigDecimal.ZERO, view.shares("ARVX"));
         assertFalse(cache.hasData());
     }
 
@@ -164,7 +164,7 @@ class PortfolioCacheTest {
 
         source.fail = false;
         now[0] += 1_000;
-        assertEquals(new BigDecimal("1000"), cache.current().shares("ACME"));
+        assertEquals(new BigDecimal("1000"), cache.current().shares("ARVX"));
         assertTrue(cache.hasData());
         assertEquals(1, cache.refreshCount());
     }
@@ -179,7 +179,7 @@ class PortfolioCacheTest {
         source.returnNull = PortfolioView.empty(); // flag: make fetch() return null
         now[0] += 1_000;
 
-        assertEquals(new BigDecimal("1000"), cache.current().shares("ACME"), "keeps the good view");
+        assertEquals(new BigDecimal("1000"), cache.current().shares("ARVX"), "keeps the good view");
         assertEquals(1, cache.failureCount());
     }
 

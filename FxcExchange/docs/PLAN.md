@@ -15,7 +15,7 @@ Delivered:
   `ClearingService` (nets fills per broker/symbol per cycle via `SettlementProfile`).
 - **FIX** (`fix/`): QuickFIX/J 4.4 acceptor (`NewOrderSingle`/`OrderCancelRequest` in,
   `ExecutionReport` out to both trade sides, `MarketDataRequest` → `W`/`X`), `ExchangeServer`, `Main`.
-- **Exit criteria met**: `ExchangeIntegrationTest` crosses orders in EUR/USD and ACME, receives
+- **Exit criteria met**: `ExchangeIntegrationTest` crosses orders in EUR/USD and ARVX, receives
   fills + market data for each, and produces clearing obligations for both asset classes.
 
 ## Backlog / next

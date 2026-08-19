@@ -71,7 +71,7 @@ per asset class:
 
 ```java
 sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: OptionInstrument, FutureInstrument */ {
-    String symbol();            // exchange symbol: "EUR/USD", "ACME"
+    String symbol();            // exchange symbol: "EUR/USD", "ARVX"
     AssetClass assetClass();    // FX_SPOT, EQUITY  (ToDo: OPTION, FUTURE)
     Currency quoteCurrency();   // currency prices are expressed in
     BigDecimal tickSize();      // minimum price increment
@@ -167,7 +167,7 @@ sealed interface Instrument permits FxSpotInstrument, EquityInstrument /* ToDo: 
 - **GridGain tables**: `INSTRUMENT` (with asset-class discriminator), `ORDERS`, `TRADE` (carries a
   `ts` execution-time column for the feed service), `SETTLEMENT_OBLIGATION`.
 - Instruments seeded from configuration (initial set: EUR/USD, GBP/USD, USD/JPY, AUD/USD spot
-  pairs plus a handful of fictional equities, e.g. ACME, GLOBEX, INITECH).
+  pairs plus a handful of fictional equities, e.g. ARVX, BLTN, CRVN).
 - **Feed service (`com.fxc.exchange.feed`, FxcExchange/docs/stories/001)** — market-surveillance
   price data over three channels: (a) **FIX** raw quotes to brokers in three depth tiers
   (top-of-book / 5-level / full) plus last sale, via `MarketDepth(264)` on the market-data request;

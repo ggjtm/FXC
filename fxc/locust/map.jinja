@@ -17,7 +17,9 @@
         'spawn_rate': 2,
         'autostart': false,
         'accounts': '000000001,000000002',
-        'symbols': 'ACME',
+        {#- Empty = every listed equity (loadgen resolves it from its own catalog mirror). The
+            universe lives in InstrumentCatalog/instruments.py and nowhere else. #}
+        'symbols': '',
         'strategy': '',
         'mix_rando': 0,
         'mix_booker': 0,
@@ -25,6 +27,16 @@
         'exchange_url': 'http://localhost:8090',
         'broker_console_url': 'http://localhost:8083',
         'client_prefix': 'locust',
+        'log_level': 'WARNING',
+        'seed': 1,
+        {#- Blank = each instrument's own reference price; a single scalar across 25 issuers put
+            orders hundreds of percent away from the book on the expensive names. #}
+        'seed_price': '',
+        'wait_min': '1.0',
+        'wait_max': '2.0',
+        'portfolio_refresh_ms': 5000,
+        'market_feed_refresh_ms': 10000,
+        'market_feed_window_ms': 900000,
         'ofx_user': salt['pillar.get']('fxc:broker:ofx_user', 'investor'),
         'ofx_password': salt['pillar.get']('fxc:broker:ofx_password', 'secret'),
         'artifact_url': None,

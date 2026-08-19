@@ -14,26 +14,26 @@ from fxc_loadgen import instruments, strategies
 class MarketViewTest(unittest.TestCase):
     def test_record_trade_updates_last_sale_and_volume_histogram(self):
         market = strategies.MarketView()
-        market.record_trade("ACME", Decimal("42.10"), Decimal("5"))
-        market.record_trade("ACME", Decimal("42.10"), Decimal("3"))
-        market.record_trade("ACME", Decimal("42.20"), Decimal("2"))
+        market.record_trade("ARVX", Decimal("42.10"), Decimal("5"))
+        market.record_trade("ARVX", Decimal("42.10"), Decimal("3"))
+        market.record_trade("ARVX", Decimal("42.20"), Decimal("2"))
 
-        self.assertEqual(Decimal("42.20"), market.last_sale["ACME"])
+        self.assertEqual(Decimal("42.20"), market.last_sale["ARVX"])
         # Volume accumulates per price — the histogram bookfish samples from.
-        self.assertEqual(Decimal("8"), market.traded_volume["ACME"][Decimal("42.10")])
-        self.assertEqual(Decimal("2"), market.traded_volume["ACME"][Decimal("42.20")])
+        self.assertEqual(Decimal("8"), market.traded_volume["ARVX"][Decimal("42.10")])
+        self.assertEqual(Decimal("2"), market.traded_volume["ARVX"][Decimal("42.20")])
 
 
 class RandoStrategyTest(unittest.TestCase):
     def _market(self) -> strategies.MarketView:
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         return market
 
     def test_returns_none_without_a_last_sale(self):
         # Java: RandoSampler returns Optional.empty(), logged as SKIPPED.
         strategy = strategies.RandoStrategy()
-        self.assertIsNone(strategy.decide("ACME", strategies.MarketView(), None, random.Random(1)))
+        self.assertIsNone(strategy.decide("ARVX", strategies.MarketView(), None, random.Random(1)))
 
     def test_price_stays_within_the_one_percent_band(self):
         strategy = strategies.RandoStrategy()
@@ -41,10 +41,10 @@ class RandoStrategyTest(unittest.TestCase):
         last = Decimal("42.10")
         lo, hi = last * Decimal("0.99"), last * Decimal("1.01")
         for seed in range(200):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             self.assertIsNotNone(intent)
             # Snapping to a cent can nudge one tick outside the raw band; allow exactly that.
-            tick = instruments.find("ACME").tick_size
+            tick = instruments.find("ARVX").tick_size
             self.assertGreaterEqual(intent.price, lo - tick, f"seed {seed}")
             self.assertLessEqual(intent.price, hi + tick, f"seed {seed}")
 
@@ -53,7 +53,7 @@ class RandoStrategyTest(unittest.TestCase):
         market = self._market()
         seen = set()
         for seed in range(500):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             self.assertGreaterEqual(intent.quantity, Decimal(strategies.MIN_QTY))
             self.assertLessEqual(intent.quantity, Decimal(strategies.MAX_QTY))
             seen.add(int(intent.quantity))
@@ -62,14 +62,14 @@ class RandoStrategyTest(unittest.TestCase):
     def test_both_sides_occur(self):
         strategy = strategies.RandoStrategy()
         market = self._market()
-        sides = {strategy.decide("ACME", market, None, random.Random(s)).side for s in range(50)}
+        sides = {strategy.decide("ARVX", market, None, random.Random(s)).side for s in range(50)}
         self.assertEqual({"BUY", "SELL"}, sides)
 
     def test_prices_are_tick_snapped(self):
         strategy = strategies.RandoStrategy()
         market = self._market()
         for seed in range(100):
-            intent = strategy.decide("ACME", market, None, random.Random(seed))
+            intent = strategy.decide("ARVX", market, None, random.Random(seed))
             # A cent grid: exactly two decimal places, and an exact multiple of the tick.
             self.assertEqual(2, -intent.price.as_tuple().exponent)
             self.assertEqual(Decimal(0), intent.price % Decimal("0.01"))
@@ -77,8 +77,8 @@ class RandoStrategyTest(unittest.TestCase):
     def test_deterministic_under_a_seed(self):
         strategy = strategies.RandoStrategy()
         market = self._market()
-        first = [strategy.decide("ACME", market, None, r) for r in [random.Random(7)] * 1]
-        second = [strategy.decide("ACME", market, None, r) for r in [random.Random(7)] * 1]
+        first = [strategy.decide("ARVX", market, None, r) for r in [random.Random(7)] * 1]
+        second = [strategy.decide("ARVX", market, None, r) for r in [random.Random(7)] * 1]
         self.assertEqual(first, second)
 
     def test_a_sequence_from_one_rng_is_reproducible(self):
@@ -87,14 +87,14 @@ class RandoStrategyTest(unittest.TestCase):
 
         def run() -> list[strategies.OrderIntent]:
             rng = random.Random(99)
-            return [strategy.decide("ACME", market, None, rng) for _ in range(20)]
+            return [strategy.decide("ARVX", market, None, rng) for _ in range(20)]
 
         self.assertEqual(run(), run())
 
     def test_band_is_configurable(self):
         wide = strategies.RandoStrategy(band=0.5)
         market = self._market()
-        prices = {wide.decide("ACME", market, None, random.Random(s)).price for s in range(100)}
+        prices = {wide.decide("ARVX", market, None, random.Random(s)).price for s in range(100)}
         # A 50% band must reach well outside the 1% one.
         self.assertTrue(any(p < Decimal("41") or p > Decimal("43") for p in prices))
 
@@ -129,27 +129,27 @@ class RandoTouchTest(unittest.TestCase):
 
     def _market(self, levels):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
+        market.set_last_sale("ARVX", Decimal("42.10"))
         if levels is not None:
-            market.set_book("ACME", levels)
+            market.set_book("ARVX", levels)
         return market
 
     def test_buys_the_best_offer(self):
         market = self._market([("OFFER", Decimal("42.20"), Decimal("10")),
                                ("OFFER", Decimal("42.15"), Decimal("10")),
                                ("BID", Decimal("42.00"), Decimal("10"))])
-        prices = {strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).price
+        prices = {strategies.RandoStrategy().decide("ARVX", market, None, random.Random(s)).price
                   for s in range(40)
-                  if strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).side == "BUY"}
+                  if strategies.RandoStrategy().decide("ARVX", market, None, random.Random(s)).side == "BUY"}
         self.assertEqual({Decimal("42.15")}, prices, "a buy lifts the best offer")
 
     def test_sells_the_best_bid(self):
         market = self._market([("BID", Decimal("42.00"), Decimal("10")),
                                ("BID", Decimal("42.05"), Decimal("10")),
                                ("OFFER", Decimal("42.20"), Decimal("10"))])
-        prices = {strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).price
+        prices = {strategies.RandoStrategy().decide("ARVX", market, None, random.Random(s)).price
                   for s in range(40)
-                  if strategies.RandoStrategy().decide("ACME", market, None, random.Random(s)).side == "SELL"}
+                  if strategies.RandoStrategy().decide("ARVX", market, None, random.Random(s)).side == "SELL"}
         self.assertEqual({Decimal("42.05")}, prices, "a sell hits the best bid")
 
     def test_an_empty_side_falls_back_instead_of_raising(self):
@@ -158,15 +158,15 @@ class RandoTouchTest(unittest.TestCase):
         offers_only = self._market([("OFFER", Decimal("42.20"), Decimal("10"))])
         for market in (bids_only, offers_only, self._market([]), self._market(None)):
             for seed in range(30):
-                intent = strategies.RandoStrategy().decide("ACME", market, None, random.Random(seed))
+                intent = strategies.RandoStrategy().decide("ARVX", market, None, random.Random(seed))
                 self.assertIsNotNone(intent)
                 self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
 
     def test_a_book_for_another_symbol_is_not_a_book_for_this_one(self):
         market = strategies.MarketView()
-        market.set_last_sale("ACME", Decimal("42.10"))
-        market.set_book("GLOBEX", [("OFFER", Decimal("11.00"), Decimal("5"))])
-        intent = strategies.RandoStrategy().decide("ACME", market, None, random.Random(1))
+        market.set_last_sale("ARVX", Decimal("42.10"))
+        market.set_book("BLTN", [("OFFER", Decimal("11.00"), Decimal("5"))])
+        intent = strategies.RandoStrategy().decide("ARVX", market, None, random.Random(1))
         self.assertLess(abs(intent.price - Decimal("42.10")), Decimal("0.90"))
 
     def test_every_price_is_on_the_tick_grid(self):
@@ -175,7 +175,7 @@ class RandoTouchTest(unittest.TestCase):
                                ("BID", Decimal("42.00"), Decimal("10"))])
         for seed in range(60):
             for m in (market, self._market([])):
-                price = strategies.RandoStrategy().decide("ACME", m, None, random.Random(seed)).price
+                price = strategies.RandoStrategy().decide("ARVX", m, None, random.Random(seed)).price
                 self.assertEqual(Decimal(0), price % Decimal("0.01"), price)
 
 

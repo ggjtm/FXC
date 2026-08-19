@@ -131,10 +131,10 @@ class EndToEndDemoIT {
                          // Phase-6 exit criteria: two investor accounts seeded.
                          accounts.seedAccount(ACCOUNT_A, "Investor A", "USD",
                                  Map.of("USD", new BigDecimal("1000000")));
-                         accounts.seedShares(ACCOUNT_A, "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+                         accounts.seedShares(ACCOUNT_A, "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
                          accounts.seedAccount(ACCOUNT_B, "Investor B", "USD",
                                  Map.of("USD", new BigDecimal("1000000")));
-                         accounts.seedShares(ACCOUNT_B, "ACME", new BigDecimal("1000"), new BigDecimal("42.00"));
+                         accounts.seedShares(ACCOUNT_B, "ARVX", new BigDecimal("1000"), new BigDecimal("42.00"));
                      },
                      FixSettingsFactory.initiator(HOST, pubFixPort, "BROKER1", "FXCPUB"))) {
 
@@ -146,7 +146,7 @@ class EndToEndDemoIT {
             OfxBrokerClient ofx = new OfxBrokerClient(
                     "http://" + HOST + ":" + broker.ofxPort() + "/ofx", "investor", "secret", BROKER_ID);
             MarketView market = new MarketView();
-            market.setLastSale("ACME", new BigDecimal("42.10"));
+            market.setLastSale("ARVX", new BigDecimal("42.10"));
 
             try (FeedClient feed = new FeedClient(HOST, 5222, DOMAIN)) {
                 feed.connect("investor", "secret");
@@ -161,7 +161,7 @@ class EndToEndDemoIT {
                 // so the end-to-end path exercises the statement read too.
                 PortfolioCache portfolio =
                         new PortfolioCache(ofx::fetchPortfolio, ACCOUNT_A, 5_000);
-                Optional<SubmittedOrder> submitted = agent.step("ACME", portfolio.current());
+                Optional<SubmittedOrder> submitted = agent.step("ARVX", portfolio.current());
                 assertFalse(portfolio.current().isEmpty(),
                         "the agent must see real holdings — a seeded account has cash and shares");
                 assertTrue(submitted.isPresent(), "rando should submit an order given a last sale");
@@ -172,7 +172,7 @@ class EndToEndDemoIT {
                 // Contra liquidity crosses whatever side/price rando chose.
                 char contra = order.intent().side() == com.fxc.investor.strategy.Side.BUY
                         ? quickfix.field.Side.SELL : quickfix.field.Side.BUY;
-                liquidity.rest(contra, "ACME", order.snappedPrice().toPlainString(), 100);
+                liquidity.rest(contra, "ARVX", order.snappedPrice().toPlainString(), 100);
 
                 // (1) the order fills at the broker.
                 waitUntil(() -> broker.omsService().order(order.clOrdId())
@@ -183,13 +183,13 @@ class EndToEndDemoIT {
 
                 // (2)+(3) the fill surfaces on the investor's XMPP feed subscription.
                 waitUntil(() -> feed.recentStatuses(10).stream()
-                        .anyMatch(s -> s.contains("FILLED") && s.contains("ACME")), 15_000);
+                        .anyMatch(s -> s.contains("FILLED") && s.contains("ARVX")), 15_000);
                 assertTrue(feed.recentStatuses(10).stream()
-                                .anyMatch(s -> s.contains("FILLED") && s.contains("ACME")),
+                                .anyMatch(s -> s.contains("FILLED") && s.contains("ARVX")),
                         "the fill should appear on the investor's feed, saw: " + feed.recentStatuses(10));
 
                 // The feed handler folds the fill back into the investor's market view.
-                assertTrue(market.lastSale("ACME").isPresent(),
+                assertTrue(market.lastSale("ARVX").isPresent(),
                         "the investor's market view should record a last-sale from the fill status");
             }
         }

@@ -163,7 +163,7 @@ public final class WebSocketFeedServer implements AutoCloseable {
 
     /** Extract the {@code symbol} query param from the GET request line ({@code null} = all). */
     private static String symbolFilter(String requestLine) {
-        // "GET /ws?symbol=ACME HTTP/1.1"
+        // "GET /ws?symbol=ARVX HTTP/1.1"
         String[] parts = requestLine.split(" ");
         if (parts.length < 2 || !parts[1].contains("?")) {
             return null;

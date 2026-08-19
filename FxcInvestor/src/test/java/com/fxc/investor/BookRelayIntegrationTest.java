@@ -109,10 +109,10 @@ class BookRelayIntegrationTest {
             assertTrue(liquidity.awaitLogon(), "liquidity should log on");
 
             // A non-crossing two-level book on each side.
-            liquidity.rest(quickfix.field.Side.BUY, "ACME", "42.08", 100, "B1");
-            liquidity.rest(quickfix.field.Side.BUY, "ACME", "42.09", 200, "B2");
-            liquidity.rest(quickfix.field.Side.SELL, "ACME", "42.11", 150, "S1");
-            liquidity.rest(quickfix.field.Side.SELL, "ACME", "42.12", 250, "S2");
+            liquidity.rest(quickfix.field.Side.BUY, "ARVX", "42.08", 100, "B1");
+            liquidity.rest(quickfix.field.Side.BUY, "ARVX", "42.09", 200, "B2");
+            liquidity.rest(quickfix.field.Side.SELL, "ARVX", "42.11", 150, "S1");
+            liquidity.rest(quickfix.field.Side.SELL, "ARVX", "42.12", 250, "S2");
 
             OfxBrokerClient ofx = new OfxBrokerClient(
                     "http://127.0.0.1:" + broker.ofxPort() + "/ofx", "investor", "secret", "FXC-BROKER");
@@ -120,13 +120,13 @@ class BookRelayIntegrationTest {
             // Poll until the broker has relayed all four book levels (FIX → cache is async).
             waitUntil(() -> {
                 try {
-                    return ofx.requestBook("ACME", 10).size() == 4;
+                    return ofx.requestBook("ARVX", 10).size() == 4;
                 } catch (Exception e) {
                     return false;
                 }
             }, 10_000);
 
-            List<MarketView.Level> book = ofx.requestBook("ACME", 10);
+            List<MarketView.Level> book = ofx.requestBook("ARVX", 10);
             assertEquals(4, book.size(), "investor should receive all four book levels");
             assertTrue(hasLevel(book, "42.09", "200"), "bid 42.09 x200 should be relayed");
             assertTrue(hasLevel(book, "42.08", "100"), "bid 42.08 x100 should be relayed");
@@ -136,8 +136,8 @@ class BookRelayIntegrationTest {
             // Feed booker: histogram over {42.08:100, 42.09:200, 42.11:150, 42.12:250}, last sale
             // 42.10. Weighted σ ≈ 0.0154, so the 1σ band admits {42.09, 42.11}.
             MarketView market = new MarketView();
-            market.setLastSale("ACME", new BigDecimal("42.10"));
-            market.setBook("ACME", book);
+            market.setLastSale("ARVX", new BigDecimal("42.10"));
+            market.setBook("ARVX", book);
             // The bare sampler, not Strategies.byName("booker"): what is under test here is price
             // selection from the relayed book. byName now wraps booker in LiquidityAwareStrategy,
             // which needs real holdings and clamps *quantity* — irrelevant to this assertion, and it
@@ -146,7 +146,7 @@ class BookRelayIntegrationTest {
             Strategy booker = new SamplingStrategy("booker", new BookerSampler());
             Random rng = new Random(7);
             for (int i = 0; i < 40; i++) {
-                Optional<OrderIntent> decision = booker.decide("ACME", market, PortfolioView.empty(), rng);
+                Optional<OrderIntent> decision = booker.decide("ARVX", market, PortfolioView.empty(), rng);
                 BigDecimal price = decision.orElseThrow().price();
                 assertTrue(price.compareTo(new BigDecimal("42.09")) == 0 || price.compareTo(new BigDecimal("42.11")) == 0,
                         "booker price " + price + " should come from the 1σ book bins {42.09, 42.11}");

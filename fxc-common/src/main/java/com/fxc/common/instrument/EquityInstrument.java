@@ -4,11 +4,11 @@ import java.math.BigDecimal;
 import java.util.Currency;
 
 /**
- * A cash equity (e.g. ACME). A fill moves a share position against a cash balance. Settlement is
+ * A cash equity (e.g. ARVX). A fill moves a share position against a cash balance. Settlement is
  * delivery-versus-payment, T+1 by convention ({@link SettlementProfile#EQUITY_DEFAULT}). No
  * corporate actions (dividends, splits) are in scope initially.
  *
- * @param symbol        ticker symbol, e.g. {@code "ACME"}
+ * @param symbol        ticker symbol, e.g. {@code "ARVX"}
  * @param issuerName    human-readable issuer name
  * @param quoteCurrency the currency the equity is priced and settled in
  * @param tickSize      minimum price increment
