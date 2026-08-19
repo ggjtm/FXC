@@ -17,16 +17,34 @@ fxc-investor-dirs:
     - require:
       - sls: fxc.common.installed
 
+{#- The published .sha256 sidecar, kept inside the install dir. It changes exactly when a new
+    build is published, which is what gates re-extraction — and because it lives INSIDE the install
+    dir, wiping that dir also removes it, so the next converge repairs the install rather than
+    considering it up to date. #}
+fxc-investor-artifact-hash:
+  file.managed:
+    - name: {{ investor.install_dir }}/.artifact.sha256
+    - source: {{ investor.artifact_sha256 }}
+    - skip_verify: True
+    - user: {{ common.service_user }}
+    - group: {{ common.service_group }}
+    - require:
+      - file: fxc-investor-dirs
+
 fxc-investor-artifact:
   archive.extracted:
     - name: {{ investor.install_dir }}
     - source: {{ investor.artifact_url }}
     - source_hash: {{ investor.artifact_sha256 }}
-    {#- Without this, archive.extracted considers itself satisfied as soon as the archive's PATHS
-        exist at the destination — so a republished tarball with identical filenames and different
-        bytes silently never lands, and the minion keeps running the old build forever
-        (fxc/docs/PROBLEMS.md P27). #}
-    - source_hash_update: True
+    {#- overwrite gated by the hash marker below. archive.extracted is otherwise satisfied the
+        moment the archive's PATHS exist, so a republished tarball with identical filenames and
+        different bytes silently never lands (P27); source_hash_update looks like the fix but only
+        fires when salt's cached copy disagrees with its own recorded sum, which it latches on the
+        first skipped run. `overwrite` is unconditional, so it is the onchanges gate that keeps this
+        from re-extracting (and restarting the service) on every converge. #}
+    - overwrite: True
+    - onchanges:
+      - file: fxc-investor-artifact-hash
     - archive_format: tar
     - enforce_toplevel: false
     - user: {{ common.service_user }}

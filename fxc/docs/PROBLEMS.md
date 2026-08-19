@@ -582,8 +582,15 @@ deadlock fix appeared to deploy successfully and changed nothing.
 "clean brown-field no-op" — which I read as proof of idempotence — was actually proof of this bug.
 The failure has no error surface at all; it looks exactly like a successful converge.
 
-**Resolution.** `source_hash_update: True` on all five `archive.extracted` states, and each service
-now watches its own `archive:` in addition to its conf and unit. Lesson: a state that reports "no
+**Resolution.** `source_hash_update: True` was the obvious fix and does **not** work: salt only
+honours it when its *cached copy* disagrees with its own *recorded sum*, and it writes both together
+on the first run that skips extraction — so the trigger latches off permanently after exactly one
+missed deploy. What does work is `overwrite: True` (salt's `extraction_needed = overwrite`,
+unconditional), gated by an `onchanges` requisite on a `file.managed` copy of the published
+`.sha256` sidecar so it does not re-extract — and restart the service — on every converge. The
+marker lives INSIDE the install dir, so wiping that dir removes it too and the next converge
+repairs the install instead of declaring it current. Each service also now watches its own
+`archive:` in addition to its conf and unit. Lesson: a state that reports "no
 changes" is only good news if you know what it compares — and "the files are all present" is not
 "the files are correct". Verify a deploy by the artifact's identity (mtime, PID, a version marker),
 never by the converge summary.
