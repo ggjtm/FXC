@@ -594,3 +594,23 @@ repairs the install instead of declaring it current. Each service also now watch
 changes" is only good news if you know what it compares — and "the files are all present" is not
 "the files are correct". Verify a deploy by the artifact's identity (mtime, PID, a version marker),
 never by the converge summary.
+
+## P28 — restarting the broker invalidates Locust's memoized accounts — **OPEN** (2026-08-19)
+
+**Symptom.** After the broker was restarted mid-session, a running swarm produced a flood of
+`rejected:unknown account: 000100000` (one row per investor) and 100% `ofx-statement` failures,
+while `RANDO accepted` kept climbing for the few accounts that happened to still resolve.
+
+**Root cause.** `AccountRegistry` memoizes `clientId -> account` in the harness process
+(`loadgen/fxc_loadgen/accounts.py`), and the broker's account table lives in the embedded GridGain
+node without native persistence — so a broker restart forgets every opened account while locust
+keeps using the stale numbers forever. Neither side is wrong on its own; the coupling is invisible.
+
+**Workaround.** Restart `fxclocust` after any `fxcbroker` restart, before swarming — the registry
+rebuilds and re-opens accounts against the live broker. Operationally: broker restart ⇒ locust
+restart, always.
+
+**Not yet resolved.** The honest fix is for `claim()` to verify the memoized account still exists
+(a cheap `GET /api/accounts/<n>`) and re-open when it does not, which makes the harness
+self-healing rather than requiring an operator to remember an ordering rule. Left open rather than
+done blind, because it wants a test against a mid-run broker restart.
