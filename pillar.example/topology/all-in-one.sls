@@ -15,6 +15,8 @@ fxc:
   mariadb:
     host: localhost
   broker:
+    # 512 investors offer ~340 orders/s; four OFX threads is a tail-latency trap.
+    ofx_http_threads: 32
     exchange_host: localhost
     pub_host: localhost
     xmpp_host: localhost
@@ -45,6 +47,3 @@ fxc:
     portfolio_refresh_ms: 3600000
     # 25 symbols x one GET per interval, serialized in one greenlet against the exchange's feed pool.
     market_feed_refresh_ms: 30000
-  broker:
-    # 512 investors offer ~340 orders/s; four OFX threads is a tail-latency trap.
-    ofx_http_threads: 32

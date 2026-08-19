@@ -1,4 +1,19 @@
 {% import 'fxc/map.jinja' as fxc_root with context %}
+{#- The ceiling on OFX throughput. Four served the demo's own agents; 512 Locust investors
+    offer ~340 orders/s, where four threads are a tail-latency trap (one GC pause queues
+    everything). Raising it costs ~1 MB of stack each.
+
+    Per SYMBOL, not divided across them: dividing would leave each of 25 names too thin to
+    absorb 512 investors, and would silently dilute every existing name when a 26th lists.
+    issue - 2*mm is the reserve opened accounts draw their shares from.
+
+    '*' = every listed equity (InstrumentCatalog.resolveSymbols). Blank price = each
+    symbol's own catalog reference price; a single scalar marked 25 issuers at one price.
+
+    Opened investor accounts now carry stock in EVERY listed name, transferred off the
+    issuer's reserve rather than minted (fxc/docs/PROBLEMS.md P24, root P19). Without it a
+    rando investor rejects 24 of 25 sells and 24 books never get an ask. 20 x 25 names is
+    ~$30k of stock against $100k cash, and the reserve covers 15,000 accounts. #}
 {% set broker = salt['grains.filter_by']({
     'default': {
         'service_name': 'fxcbroker',
@@ -6,31 +21,19 @@
         'ofx_http_host': '0.0.0.0',
         'ofx_http_port': 8082,
         'ofx_broker_id': 'FXC-BROKER',
-        {#- The ceiling on OFX throughput. Four served the demo's own agents; 512 Locust investors
-            offer ~340 orders/s, where four threads are a tail-latency trap (one GC pause queues
-            everything). Raising it costs ~1 MB of stack each. #}
         'ofx_http_threads': 16,
         'account_issuer': '000000000',
         'account_issue_shares': 1000000,
-        {#- Per SYMBOL, not divided across them: dividing would leave each of 25 names too thin to
-            absorb 512 investors, and would silently dilute every existing name when a 26th lists.
-            issue - 2*mm is the reserve opened accounts draw their shares from. #}
         'account_mm_shares': 350000,
         'account_dev': '000000001',
         'account_dev2': '000000002',
         'account_seed_cash': 1000000,
-        {#- '*' = every listed equity (InstrumentCatalog.resolveSymbols). Blank price = each
-            symbol's own catalog reference price; a single scalar marked 25 issuers at one price. #}
         'account_seed_symbol': '*',
         'account_seed_share_price': '',
         'account_open_enabled': true,
         'account_open_first': 100000,
         'account_open_number_width': 9,
         'account_open_seed_cash': 100000,
-        {#- Opened investor accounts now carry stock in EVERY listed name, transferred off the
-            issuer's reserve rather than minted (fxc/docs/PROBLEMS.md P24, root P19). Without it a
-            rando investor rejects 24 of 25 sells and 24 books never get an ask. 20 x 25 names is
-            ~$30k of stock against $100k cash, and the reserve covers 15,000 accounts. #}
         'account_open_seed_shares': 20,
         'account_open_seed_symbol': '*',
         'account_open_seed_from': '000000000',

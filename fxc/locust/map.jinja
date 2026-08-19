@@ -7,6 +7,11 @@
     precisely so cross-component contracts like this can be read; an explicit fxc:locust:ofx_*
     still wins via merge. #}
 {% import 'fxc/map.jinja' as fxc_root with context %}
+{#- Empty = every listed equity (loadgen resolves it from its own catalog mirror). The
+    universe lives in InstrumentCatalog/instruments.py and nowhere else.
+
+    Blank = each instrument's own reference price; a single scalar across 25 issuers put
+    orders hundreds of percent away from the book on the expensive names. #}
 {% set locust = salt['grains.filter_by']({
     'default': {
         'service_name': 'fxclocust',
@@ -17,8 +22,6 @@
         'spawn_rate': 2,
         'autostart': false,
         'accounts': '000000001,000000002',
-        {#- Empty = every listed equity (loadgen resolves it from its own catalog mirror). The
-            universe lives in InstrumentCatalog/instruments.py and nowhere else. #}
         'symbols': '',
         'strategy': '',
         'mix_rando': 0,
@@ -29,8 +32,6 @@
         'client_prefix': 'locust',
         'log_level': 'WARNING',
         'seed': 1,
-        {#- Blank = each instrument's own reference price; a single scalar across 25 issuers put
-            orders hundreds of percent away from the book on the expensive names. #}
         'seed_price': '',
         'wait_min': '1.0',
         'wait_max': '2.0',

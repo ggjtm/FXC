@@ -3,6 +3,10 @@
     scripts/demo.sh's two differently-seeded Java agents). No GridGain here — FxcInvestor is a plain
     MariaDB-backed client/agent (root README's JDK table), so no GridGain JVM opts/license needed. #}
 {% import 'fxc/map.jinja' as fxc_root with context %}
+{#- '*' = every listed equity, round-robin. One resident agent quoting all 25 books is what
+    gives the other 24 a maker; pin a single symbol only for a focused demo.
+
+    Blank = each symbol's own catalog reference price. #}
 {% set investor = salt['grains.filter_by']({
     'default': {
         'service_name': 'fxcinvestor',
@@ -18,10 +22,7 @@
         'agent_client_id': 'investor-1',
         'agent_enabled': true,
         'agent_strategy': 'booker',
-        {#- '*' = every listed equity, round-robin. One resident agent quoting all 25 books is what
-            gives the other 24 a maker; pin a single symbol only for a focused demo. #}
         'agent_symbol': '*',
-        {#- Blank = each symbol's own catalog reference price. #}
         'agent_seed_last_sale': '',
         'agent_interval_ms': 1500,
         'agent_ticks': 0,
