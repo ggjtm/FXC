@@ -113,6 +113,9 @@ fxc-tigase-load-schema-script:
     - template: jinja
     - mode: '0750'
     - user: {{ common.service_user }}
+    {#- group too, not just user: dist-ownership chowns the whole tree recursively, so a file born
+        with the wrong group is re-chowned on EVERY converge and the run never reports clean. #}
+    - group: {{ common.service_group }}
     - context:
         tigase: {{ tigase | tojson }}
         svc_password: {{ salt['pillar.get']('fxc:tigase:svc_password') | tojson }}
